@@ -1,1074 +1,226 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>A Casa do Outro Lado 3D</title>
-<style>
-*{box-sizing:border-box}
-body{margin:0;background:#08090d;color:#eee;font-family:Arial,sans-serif}
-#top{padding:10px 16px;background:#11131a;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
-h1{font-size:18px;letter-spacing:3px;margin:0;color:#d8d0d0}
-#hud{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
-.pill{background:#252936;border:1px solid #414758;border-radius:5px;padding:6px 9px;font-size:12px}
-#game{width:100vw;height:calc(100vh - 94px);min-height:380px;display:block}
-#help{position:fixed;bottom:8px;left:10px;background:#090a0dcc;padding:8px 11px;border:1px solid #45404a;border-radius:5px;font-size:12px;color:#ddd}
-#message{position:fixed;bottom:8px;right:10px;max-width:48vw;background:#090a0dcc;padding:8px 11px;border:1px solid #66554a;border-radius:5px;color:#f0d5a0;font-size:12px}
-#overlay{position:fixed;inset:0;background:#05060bea;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;z-index:5}
-#panel{max-width:550px}
-#panel h2{font-size:30px;letter-spacing:2px;color:#d9c6bd}
-#panel p{line-height:1.6;color:#ccc}
-button{background:#9b3039;color:white;border:0;padding:13px 24px;font-weight:bold;cursor:pointer}
-</style>
-</head>
-<body>
+from pathlib import Path
+p = Path('/mnt/data/a_casa_do_outro_lado_3d.html')
+s = p.read_text()
 
-<div id="top">
-<h1>A CASA DO OUTRO LADO · 3D</h1>
-<div id="hud">
-<span class="pill" id="room">Entrada</span>
-<span class="pill" id="health">Vida: 100</span>
-<span class="pill" id="keys">Chaves: 0/3</span>
-<span class="pill" id="gear">Lanterna</span>
-<span class="pill" id="phase">Fase: 1/4</span>
-</div>
-</div>
+# Interface: ammunition, reload and crosshair.
+s = s.replace(
+'<span class="pill" id="phase">Fase: 1/4</span>',
+'<span class="pill" id="phase">Fase: 1/4</span><span class="pill" id="ammo">Energia: 12/36</span>'
+)
+s = s.replace(
+'<div id="help">WASD mover · Mouse olhar · E interagir · Q trocar equipamento · Espaço usar · Shift correr</div>',
+'<div id="help">WASD mover · Mouse olhar · E interagir · Botão esquerdo atirar · R recarregar · Q equipamento · Espaço usar · Shift correr</div><div id="crosshair">＋</div>'
+)
+s = s.replace(
+'#panel p{line-height:1.6;color:#ccc}button{',
+'#panel p{line-height:1.6;color:#ccc}#crosshair{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);font-size:25px;color:#f2e6d0;text-shadow:0 0 6px #000;pointer-events:none;z-index:2}button{'
+)
+s = s.replace(
+'Explore a casa em terceira pessoa. Seu personagem humanoide aparece no cenário 3D. Encontre três chaves, recolha equipamentos e fuja da criatura que ronda os corredores.',
+'Explore a casa em primeira pessoa. Encontre três chaves, recolha comida e energia, use seu blaster fictício para afastar a criatura e fuja.'
+)
+s = s.replace(
+'Use WASD para andar, mouse para olhar e E para interagir. Clique em “Entrar” para começar.',
+'WASD para andar · Mouse para olhar · E para interagir · Clique esquerdo para disparar · R para recarregar.'
+)
 
-<canvas id="game"></canvas>
+# Add food and energy pickups throughout the house.
+s = s.replace(
+"{x:3,z:3,type:'note',label:'Bilhete'}",
+"{x:3,z:3,type:'note',label:'Bilhete'},{x:-2,z:3,type:'food',label:'Lata de comida'}"
+)
+s = s.replace(
+"{x:4,z:3,type:'battery',label:'Pilha'}",
+"{x:4,z:3,type:'battery',label:'Pilha'},{x:2,z:-3,type:'ammo',label:'Células de energia'}",
+1
+)
+s = s.replace(
+"{x:4,z:-3,type:'snack',label:'Comida'}",
+"{x:4,z:-3,type:'food',label:'Comida enlatada'}"
+)
+s = s.replace(
+"{x:-4,z:-3,type:'battery',label:'Pilha'}",
+"{x:-4,z:-3,type:'battery',label:'Pilha'},{x:1,z:0,type:'food',label:'Pacote de biscoitos'}"
+)
+s = s.replace(
+"{x:4,z:3,type:'battery',label:'Pilha'}",
+"{x:4,z:3,type:'battery',label:'Pilha'},{x:-2,z:2,type:'ammo',label:'Células de energia'}"
+)
 
-<div id="help">
-WASD mover · Mouse olhar · E interagir · Q trocar equipamento · Espaço usar · Shift correr
-</div>
+# Add weapon state.
+s = s.replace(
+"let roomIndex=0,keys=0,health=100,gear='flash',inventory={pulse:0,flare:0},collected=new Set(),stun=0,damageTimer=0,gameOn=false,ended=false,elapsed=0;",
+"let roomIndex=0,keys=0,health=100,gear='flash',inventory={pulse:0,flare:0},collected=new Set(),stun=0,damageTimer=0,gameOn=false,ended=false,elapsed=0;\\nlet ammo=12,reserveAmmo=36,shootCooldown=0,monsterHP=100,reloadTimer=0;\\nconst projectiles=[];"
+)
 
-<div id="message">Encontre as chaves e escape.</div>
-
-<div id="overlay">
-<div id="panel">
-<h2>A CASA ESTÁ ACORDADA</h2>
-<p>
-Explore a casa em terceira pessoa. Seu personagem humanoide aparece no cenário 3D.
-Encontre três chaves, recolha equipamentos e fuja da criatura que ronda os corredores.
-</p>
-<p>Use WASD para andar, mouse para olhar e E para interagir.</p>
-<button id="start">ENTRAR NA CASA</button>
-</div>
-</div>
-
-<script type="module">
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
-
-const canvas=document.querySelector('#game');
-
-const renderer=new THREE.WebGLRenderer({
- canvas,
- antialias:true
-});
-
-renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-renderer.shadowMap.enabled=true;
-renderer.shadowMap.type=THREE.PCFSoftShadowMap;
-renderer.setSize(innerWidth,innerHeight-94);
-renderer.outputColorSpace=THREE.SRGBColorSpace;
-renderer.toneMapping=THREE.ACESFilmicToneMapping;
-
-const scene=new THREE.Scene();
-scene.background=new THREE.Color(0x090a0e);
-scene.fog=new THREE.FogExp2(0x090a0e,.035);
-
-const camera=new THREE.PerspectiveCamera(
- 72,
- innerWidth/(innerHeight-94),
- .1,
- 100
-);
-
-camera.position.set(0,1.65,5);
-
-const ambient=new THREE.HemisphereLight(
- 0x9aa4bd,
- 0x171018,
- .38
-);
-scene.add(ambient);
-
-const moon=new THREE.DirectionalLight(0x8794b9,.55);
-moon.position.set(-5,9,4);
-moon.castShadow=true;
-scene.add(moon);
-
-const mat=(color,rough=.9,metal=0)=>
- new THREE.MeshStandardMaterial({
-  color,
-  roughness:rough,
-  metalness:metal
- });
-
-const floorMat=mat(0x34323a);
-const wallMat=mat(0x48434a);
-const wood=mat(0x49352e);
-const darkWood=mat(0x241c20);
-const metal=mat(0x666a72,.45,.65);
-
-const playerMat=mat(0x303d4b);
-const skin=mat(0xb98569);
-const pants=mat(0x20252d);
-const shoe=mat(0x111318);
-const monsterMat=mat(0x241018);
-
-const eyeMat=new THREE.MeshBasicMaterial({
- color:0xff263d
-});
-
-const rooms=[
- {
-  name:'Entrada',
-  doors:[
-   {x:9,z:0,to:1,side:'right'}
-  ],
-  items:[
-   {x:-4,z:-2,type:'battery',label:'Pilha'},
-   {x:3,z:3,type:'note',label:'Bilhete'}
-  ]
- },
- {
-  name:'Sala',
-  doors:[
-   {x:-9,z:0,to:0,side:'left'},
-   {x:9,z:0,to:2,side:'right'},
-   {x:0,z:-5,to:3,side:'back'}
-  ],
-  items:[
-   {x:-4,z:-2,type:'pulse',label:'Pulso elétrico'},
-   {x:4,z:3,type:'battery',label:'Pilha'}
-  ]
- },
- {
-  name:'Cozinha',
-  doors:[
-   {x:-9,z:0,to:1,side:'left'},
-   {x:9,z:0,to:4,side:'right'}
-  ],
-  items:[
-   {x:-3,z:3,type:'key',label:'Chave enferrujada'},
-   {x:4,z:-3,type:'snack',label:'Comida'}
-  ]
- },
- {
-  name:'Corredor',
-  doors:[
-   {x:0,z:5,to:1,side:'front'},
-   {x:0,z:-5,to:5,side:'back'},
-   {x:9,z:0,to:6,side:'right'}
-  ],
-  items:[
-   {x:5,z:3,type:'flare',label:'Sinalizador'},
-   {x:-5,z:-2,type:'note',label:'Bilhete'}
-  ]
- },
- {
-  name:'Despensa',
-  doors:[
-   {x:-9,z:0,to:2,side:'left'}
-  ],
-  items:[
-   {x:4,z:3,type:'key',label:'Chave azul'},
-   {x:-4,z:-3,type:'battery',label:'Pilha'}
-  ]
- },
- {
-  name:'Quarto',
-  doors:[
-   {x:0,z:5,to:3,side:'front'}
-  ],
-  items:[
-   {x:4,z:-3,type:'key',label:'Chave preta'},
-   {x:-4,z:3,type:'pulse',label:'Pulso elétrico'}
-  ]
- },
- {
-  name:'Escritório',
-  doors:[
-   {x:-9,z:0,to:3,side:'left'},
-   {x:9,z:0,to:7,side:'right',locked:2}
-  ],
-  items:[
-   {x:-4,z:-3,type:'note',label:'Bilhete'},
-   {x:4,z:3,type:'battery',label:'Pilha'}
-  ]
- },
- {
-  name:'Porão',
-  doors:[
-   {x:-9,z:0,to:6,side:'left'},
-   {x:0,z:-5,to:8,side:'back',locked:3}
-  ],
-  items:[
-   {x:-4,z:3,type:'flare',label:'Sinalizador'},
-   {x:4,z:-3,type:'battery',label:'Pilha'}
-  ]
- },
- {
-  name:'Saída',
-  doors:[
-   {x:0,z:5,to:7,side:'front'}
-  ],
-  items:[]
- }
-];
-
-let roomIndex=0;
-let keys=0;
-let health=100;
-let gear='flash';
-
-let inventory={
- pulse:0,
- flare:0
-};
-
-let collected=new Set();
-let stun=0;
-let damageTimer=0;
-let gameOn=false;
-let ended=false;
-let elapsed=0;
-
-const roomGroup=new THREE.Group();
-scene.add(roomGroup);
-
-const doorMeshes=[];
-const itemMeshes=[];
-
-function box(
- parent,x,y,z,
- sx,sy,sz,
- material,
- cast=true
-){
- const m=new THREE.Mesh(
-  new THREE.BoxGeometry(sx,sy,sz),
-  material
- );
-
- m.position.set(x,y,z);
- m.castShadow=cast;
- m.receiveShadow=true;
- parent.add(m);
-
- return m;
-}
-
-function makeHumanoid(isMonster=false){
-
- const root=new THREE.Group();
-
- const bodyMat=isMonster?monsterMat:playerMat;
- const legMat=isMonster?monsterMat:pants;
- const armMat=isMonster?monsterMat:playerMat;
-
- const torso=new THREE.Mesh(
-  new THREE.CapsuleGeometry(
-   isMonster?.34:.25,
-   isMonster?.85:.65,
-   5,
-   8
-  ),
-  bodyMat
- );
-
- torso.position.y=1.35;
- torso.castShadow=true;
- root.add(torso);
-
- const head=new THREE.Mesh(
-  new THREE.SphereGeometry(
-   isMonster?.27:.22,
-   16,
-   12
-  ),
-  isMonster?monsterMat:skin
- );
-
- head.position.y=2.05;
- head.castShadow=true;
- root.add(head);
-
- const hair=new THREE.Mesh(
-  new THREE.SphereGeometry(.235,14,8),
-  isMonster?monsterMat:mat(0x17171b)
- );
-
- hair.scale.set(1,.55,1);
- hair.position.set(0,2.17,0);
- root.add(hair);
-
- for(const side of [-1,1]){
-
-  const arm=new THREE.Mesh(
-   new THREE.CapsuleGeometry(
-    isMonster?.13:.105,
-    .58,
-    4,
-    8
-   ),
-   armMat
-  );
-
-  arm.position.set(
-   side*(isMonster?.43:.34),
-   1.38,
-   0
-  );
-
-  arm.rotation.z=-side*.13;
-  arm.castShadow=true;
-  root.add(arm);
-
-  const leg=new THREE.Mesh(
-   new THREE.CapsuleGeometry(
-    isMonster?.16:.12,
-    .68,
-    4,
-    8
-   ),
-   legMat
-  );
-
-  leg.position.set(side*.15,.48,0);
-  leg.castShadow=true;
-  root.add(leg);
-
-  const foot=new THREE.Mesh(
-   new THREE.BoxGeometry(.22,.13,.38),
-   isMonster?monsterMat:shoe
-  );
-
-  foot.position.set(side*.15,.12,-.07);
-  root.add(foot);
- }
-
- if(isMonster){
-
+# Make the creature more distinctive and menacing with non-graphic stylized details.
+s = s.replace(
+"if(isMonster){\\n  for(const side of [-1,1]){const eye=new THREE.Mesh(new THREE.SphereGeometry(.055,8,8),eyeMat);eye.position.set(side*.105,2.06,-.22);root.add(eye);}\\n }",
+"""if(isMonster){
+  // Chifres curtos, mandíbula escura, olhos brilhantes e garras estilizadas.
   for(const side of [-1,1]){
-
-   const eye=new THREE.Mesh(
-    new THREE.SphereGeometry(.055,8,8),
-    eyeMat
-   );
-
-   eye.position.set(
-    side*.105,
-    2.06,
-    -.22
-   );
-
-   root.add(eye);
+   const eye=new THREE.Mesh(new THREE.SphereGeometry(.065,10,8),eyeMat);
+   eye.position.set(side*.105,2.06,-.22);root.add(eye);
+   const horn=new THREE.Mesh(new THREE.ConeGeometry(.105,.42,7),monsterMat);
+   horn.position.set(side*.19,2.34,-.015);
+   horn.rotation.z=side*.38;root.add(horn);
+   const claw=new THREE.Mesh(new THREE.ConeGeometry(.055,.32,6),mat(0x09090d));
+   claw.position.set(side*.48,1.05,-.12);
+   claw.rotation.x=Math.PI;root.add(claw);
   }
- }
+  const jaw=new THREE.Mesh(new THREE.BoxGeometry(.24,.10,.12),mat(0x08070a));
+  jaw.position.set(0,1.91,-.205);root.add(jaw);
+  const ridge=new THREE.Mesh(new THREE.ConeGeometry(.12,.38,7),monsterMat);
+  ridge.position.set(0,2.42,.04);root.add(ridge);
+ }"""
+)
 
- return root;
+# Add colors/geometries for food and ammo items.
+s = s.replace(
+"const color=it.type==='key'?0xe7c84c:it.type==='pulse'?0x55ddeb:it.type==='flare'?0xff8b45:it.type==='note'?0xd6c9a7:0x8cc39d;\\n  const mesh=new THREE.Mesh(new THREE.IcosahedronGeometry(.22,0),new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:.35}));",
+"""const color=it.type==='key'?0xe7c84c:it.type==='pulse'?0x55ddeb:it.type==='flare'?0xff8b45:it.type==='note'?0xd6c9a7:it.type==='food'?0x75c66b:it.type==='ammo'?0x65aaff:0x8cc39d;
+  const geometry=it.type==='food'?new THREE.CylinderGeometry(.16,.16,.3,12):it.type==='ammo'?new THREE.BoxGeometry(.28,.22,.22):new THREE.IcosahedronGeometry(.22,0);
+  const mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:.35}));"""
+)
+
+# HUD includes ammo.
+s = s.replace(
+"document.querySelector('#phase').textContent='Fase: '+Math.min(4,Math.floor(roomIndex/2)+1)+'/4';",
+"document.querySelector('#phase').textContent='Fase: '+Math.min(4,Math.floor(roomIndex/2)+1)+'/4';\\n document.querySelector('#ammo').textContent='Energia: '+ammo+'/'+reserveAmmo;"
+)
+
+# Interaction pickups.
+s = s.replace(
+"if(it.type==='snack'){health=Math.min(100,health+20);say('Você encontrou comida.');}",
+"""if(it.type==='snack'||it.type==='food'){health=Math.min(100,health+30);say('Comida coletada: +30 de vida.');}
+ if(it.type==='ammo'){reserveAmmo=Math.min(72,reserveAmmo+12);say('Células de energia coletadas: +12 cargas.');}"""
+)
+
+# Battery becomes battery for light (still heals a little as a game pickup).
+s = s.replace(
+"if(it.type==='battery'){health=Math.min(100,health+10);say('Pilha encontrada. Você recuperou um pouco de vida.');}",
+"if(it.type==='battery'){health=Math.min(100,health+10);say('Pilha encontrada: +10 de vida.');}"
+)
+
+# Create first-person arms and fictional blaster attached to camera.
+anchor = "const player=makeHumanoid(false);player.visible=true;scene.add(player);"
+s = s.replace(
+anchor,
+"""const player=makeHumanoid(false);player.visible=false;scene.add(player);
+
+// Braços, luvas e blaster de energia são presos à câmera: visão em primeira pessoa.
+const viewModel=new THREE.Group();
+camera.add(viewModel);
+const sleeveMat=mat(0x26384b),gloveMat=mat(0x9b765f),gunMat=mat(0x202832,.42,.55),glowMat=new THREE.MeshBasicMaterial({color:0x42d9ff});
+function vmBox(x,y,z,sx,sy,sz,material){
+ const mesh=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),material);
+ mesh.position.set(x,y,z);viewModel.add(mesh);return mesh;
 }
+const leftArm=new THREE.Mesh(new THREE.CapsuleGeometry(.105,.48,4,8),sleeveMat);
+leftArm.position.set(-.38,-.42,-.58);leftArm.rotation.z=-.38;viewModel.add(leftArm);
+const rightArm=new THREE.Mesh(new THREE.CapsuleGeometry(.105,.48,4,8),sleeveMat);
+rightArm.position.set(.38,-.43,-.58);rightArm.rotation.z=.38;viewModel.add(rightArm);
+vmBox(-.38,-.23,-.78,.20,.14,.18,gloveMat);
+vmBox(.38,-.23,-.78,.20,.14,.18,gloveMat);
+// Blaster claramente fictício, com núcleo luminoso.
+vmBox(.34,-.28,-.82,.24,.19,.48,gunMat);
+vmBox(.34,-.17,-1.08,.13,.09,.24,metal);
+vmBox(.34,-.27,-1.20,.09,.07,.07,glowMat);
+vmBox(.34,-.43,-.72,.13,.28,.16,gunMat);
+const muzzleLight=new THREE.PointLight(0x42d9ff,0,3);
+viewModel.add(muzzleLight);
+const weaponFlash=new THREE.Mesh(new THREE.SphereGeometry(.09,10,8),glowMat);
+weaponFlash.position.set(.34,-.27,-1.28);weaponFlash.visible=false;viewModel.add(weaponFlash);"""
+)
 
-const monster=makeHumanoid(true);
-monster.scale.set(1.15,1.15,1.15);
-scene.add(monster);
-
-const player=makeHumanoid(false);
-player.visible=true;
-scene.add(player);
-
-const playerPos=new THREE.Vector3(0,0,4.0);
-const monsterPos=new THREE.Vector3(5,0,-2);
-
-let yaw=0;
-let pitch=0;
-
-function buildRoom(){
-
- while(roomGroup.children.length){
-  const c=roomGroup.children[0];
-  roomGroup.remove(c);
- }
-
- doorMeshes.length=0;
- itemMeshes.length=0;
-
- const r=rooms[roomIndex];
-
- const floor=new THREE.Mesh(
-  new THREE.PlaneGeometry(20,12),
-  floorMat
- );
-
- floor.rotation.x=-Math.PI/2;
- floor.receiveShadow=true;
- roomGroup.add(floor);
-
- const opening=2.2;
-
- const sideDoors=r.doors.filter(
-  d=>d.side==='left'||d.side==='right'
- );
-
- const endDoors=r.doors.filter(
-  d=>d.side==='front'||d.side==='back'
- );
-
- for(const side of ['left','right']){
-
-  const x=side==='left'?-10:10;
-
-  if(sideDoors.some(d=>d.side===side)){
-
-   box(
-    roomGroup,
-    x,2,-(6+opening/2)/2,
-    .35,4,6-opening/2,
-    wallMat
-   );
-
-   box(
-    roomGroup,
-    x,2,(6+opening/2)/2,
-    .35,4,6-opening/2,
-    wallMat
-   );
-
-   box(
-    roomGroup,
-    x,3.45,0,
-    .35,1.1,opening,
-    wallMat
-   );
-
-  }else{
-
-   box(
-    roomGroup,
-    x,2,0,
-    .35,4,12,
-    wallMat
-   );
-  }
- }
-
- for(const side of ['back','front']){
-
-  const z=side==='back'?-6:6;
-
-  if(endDoors.some(d=>d.side===side)){
-
-   box(
-    roomGroup,
-    -(10+opening/2)/2,2,z,
-    10-opening/2,4,.35,
-    wallMat
-   );
-
-   box(
-    roomGroup,
-    (10+opening/2)/2,2,z,
-    10-opening/2,4,.35,
-    wallMat
-   );
-
-   box(
-    roomGroup,
-    0,3.45,z,
-    opening,1.1,.35,
-    wallMat
-   );
-
-  }else{
-
-   box(
-    roomGroup,
-    0,2,z,
-    20,4,.35,
-    wallMat
-   );
-  }
- }
-
- for(const d of r.doors){
-
-  let mesh;
-
-  const locked=!!(d.locked&&keys<d.locked);
-
-  if(d.side==='left'||d.side==='right'){
-
-   const x=d.side==='left'?-9.78:9.78;
-
-   box(roomGroup,x,1.35,-1.1,.18,2.7,.16,wood);
-   box(roomGroup,x,1.35,1.1,.18,2.7,.16,wood);
-   box(roomGroup,x,2.8,0,.18,.16,2.2,wood);
-
-   mesh=box(
-    roomGroup,
-    x,1.25,-.55,
-    .10,2.5,1.05,
-    locked?darkWood:wood
-   );
-
-  }else{
-
-   const z=d.side==='back'?-5.78:5.78;
-
-   box(roomGroup,-1.1,1.35,z,.16,2.7,.18,wood);
-   box(roomGroup,1.1,1.35,z,.16,2.7,.18,wood);
-   box(roomGroup,0,2.8,z,2.2,.16,.18,wood);
-
-   mesh=box(
-    roomGroup,
-    -.55,1.25,z,
-    1.05,2.5,.10,
-    locked?darkWood:wood
-   );
-  }
-
-  mesh.userData={
-   kind:'door',
-   door:d
-  };
-
-  doorMeshes.push(mesh);
- }
-
- if(roomIndex===2){
-
-  box(roomGroup,-6,.55,-3,2.5,1.1,1.2,darkWood);
-  box(roomGroup,5,.8,3,2.2,1.6,1.2,wood);
-  box(roomGroup,0,.5,-4,3,1,1,metal);
- }
-
- if(roomIndex===5){
-
-  box(roomGroup,-5,.5,-3,3,1,2,wood);
-  box(roomGroup,5,.45,3,3,.9,2,darkWood);
- }
-
- if(roomIndex===6){
-
-  box(roomGroup,-5,.65,-3,3,1.3,1,wood);
-  box(roomGroup,5,.5,3,3,1,1,metal);
- }
-
- if(roomIndex===7){
-
-  box(roomGroup,-6,.8,-3,2,1.6,2,darkWood);
-  box(roomGroup,6,.5,3,2,1,2,wood);
- }
-
- const lamp=new THREE.PointLight(
-  roomIndex===7?0x8a4050:0xb7a6a0,
-  roomIndex===7?12:18,
-  13
- );
-
- lamp.position.set(0,3.5,0);
- roomGroup.add(lamp);
-
- r.items.forEach((it,i)=>{
-
-  const id=roomIndex+'-'+i;
-
-  if(collected.has(id))return;
-
-  const color=
-   it.type==='key'?0xe7c84c:
-   it.type==='pulse'?0x55ddeb:
-   it.type==='flare'?0xff8b45:
-   it.type==='note'?0xd6c9a7:
-   0x8cc39d;
-
-  const mesh=new THREE.Mesh(
-   new THREE.IcosahedronGeometry(.22,0),
-   new THREE.MeshStandardMaterial({
-    color,
-    emissive:color,
-    emissiveIntensity:.35
-   })
-  );
-
-  mesh.position.set(it.x,.35,it.z);
-  mesh.castShadow=true;
-
-  mesh.userData={
-   kind:'item',
-   item:it,
-   index:i
-  };
-
-  roomGroup.add(mesh);
-  itemMeshes.push(mesh);
-
-  const light=new THREE.PointLight(color,1.2,2);
-  light.position.copy(mesh.position);
-  roomGroup.add(light);
- });
+# Add shooting/reload functions before key handler.
+insert_before = "const keysDown={};"
+shooting = """function reloadWeapon(){
+ if(reloadTimer>0||ammo>=12||reserveAmmo<=0){say('Não é possível recarregar agora.');return;}
+ reloadTimer=1.15;say('Recarregando o blaster...');
 }
-
-function updateHUD(){
-
- document.querySelector('#room').textContent=
-  'Cômodo: '+rooms[roomIndex].name;
-
- document.querySelector('#health').textContent=
-  'Vida: '+Math.max(0,Math.ceil(health));
-
- document.querySelector('#keys').textContent=
-  'Chaves: '+keys+'/3';
-
- document.querySelector('#gear').textContent=
-  'Equipamento: '+
-  (gear==='flash'?'Lanterna':
-   gear==='pulse'?'Pulso elétrico':'Sinalizador');
-
- document.querySelector('#phase').textContent=
-  'Fase: '+Math.min(4,Math.floor(roomIndex/2)+1)+'/4';
-}
-
-function say(t){
- document.querySelector('#message').textContent=t;
-}
-
-function enterRoom(to,door){
-
- roomIndex=to;
-
- if(door.side==='left'){
-  playerPos.set(7.5,0,0);
- }else if(door.side==='right'){
-  playerPos.set(-7.5,0,0);
- }else if(door.side==='back'){
-  playerPos.set(0,0,4.5);
+function shoot(){
+ if(!gameOn||ended||shootCooldown>0||reloadTimer>0)return;
+ if(ammo<=0){say('Sem energia. Pressione R para recarregar.');return;}
+ ammo--;shootCooldown=.28;
+ weaponFlash.visible=true;muzzleLight.intensity=7;
+ setTimeout(()=>{weaponFlash.visible=false;muzzleLight.intensity=0;},75);
+ // Disparo de energia fictício: verifica se a criatura está na linha de visão.
+ const direction=new THREE.Vector3();
+ camera.getWorldDirection(direction);
+ const toMonster=monsterPos.clone().add(new THREE.Vector3(0,1.15,0)).sub(camera.position);
+ const distance=toMonster.length();
+ const aim=toMonster.normalize().dot(direction);
+ if(distance<18&&aim>.975&&monster.visible){
+  monsterHP-=25;stun=Math.max(stun,.55);
+  say(monsterHP<=0?'A criatura se desfez em sombras!':'Disparo acertou a criatura!');
+  if(monsterHP<=0){monster.visible=false;monsterPos.set(100,0,100);}
  }else{
-  playerPos.set(0,0,-4.5);
+  say('O disparo de energia iluminou a escuridão.');
  }
-
- monsterPos.set(
-  playerPos.x>0?-6:6,
-  0,
-  playerPos.z>0?-4:4
- );
-
- monster.position.copy(monsterPos);
-
- buildRoom();
-
- say('Você entrou em '+rooms[to].name+'.');
  updateHUD();
 }
-
-function interact(){
-
- let best=null;
- let bestD=2.0;
-
- for(const m of [...itemMeshes,...doorMeshes]){
-
-  const p=m.position.clone();
-
-  const d=Math.hypot(
-   p.x-playerPos.x,
-   p.z-playerPos.z
-  );
-
-  if(d<bestD){
-   best=m;
-   bestD=d;
-  }
- }
-
- if(!best){
-  say('Não há nada ao alcance.');
-  return;
- }
-
- if(best.userData.kind==='door'){
-
-  const d=best.userData.door;
-
-  if(d.locked&&keys<d.locked){
-   say('Esta porta exige '+d.locked+' chaves.');
-   return;
-  }
-
-  if(roomIndex===7&&d.to===8&&keys<3){
-   say('A saída está selada. Encontre as três chaves.');
-   return;
-  }
-
-  enterRoom(d.to,d);
-  return;
- }
-
- const it=best.userData.item;
- const id=roomIndex+'-'+best.userData.index;
-
- collected.add(id);
-
- if(it.type==='key'){
-  keys++;
-  say('Chave encontrada!');
- }
-
- if(it.type==='pulse'){
-  inventory.pulse++;
-  say('Carga de pulso elétrico coletada.');
- }
-
- if(it.type==='flare'){
-  inventory.flare++;
-  say('Sinalizador coletado.');
- }
-
- if(it.type==='battery'){
-  health=Math.min(100,health+10);
-  say('Pilha encontrada. Você recuperou um pouco de vida.');
- }
-
- if(it.type==='snack'){
-  health=Math.min(100,health+20);
-  say('Você encontrou comida.');
- }
-
- if(it.type==='note'){
-  say('Bilhete: “A luz é a única coisa que ela teme.”');
- }
-
- buildRoom();
- updateHUD();
-}
-
-function useGear(){
-
- if(gear==='flash'){
-
-  if(monsterPos.distanceTo(playerPos)<5.5){
-   stun=2.2;
-   say('A criatura recuou diante da lanterna!');
-  }else{
-   say('A lanterna ilumina o caminho.');
-  }
-
- }else if(gear==='pulse'){
-
-  if(inventory.pulse<1){
-   say('Você não tem cargas de pulso.');
-   return;
-  }
-
-  inventory.pulse--;
-  stun=4;
-  say('Pulso elétrico disparado! A criatura foi paralisada.');
-
- }else{
-
-  if(inventory.flare<1){
-   say('Você não tem sinalizadores.');
-   return;
-  }
-
-  inventory.flare--;
-  stun=6;
-  say('O sinalizador afastou a criatura!');
- }
-
- updateHUD();
-}
-
-const keysDown={};
-
-addEventListener('keydown',e=>{
-
- const k=e.key.toLowerCase();
- keysDown[k]=true;
-
- if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(k)){
-  e.preventDefault();
- }
-
- if(!gameOn||ended)return;
-
- if(k==='e')interact();
-
- if(k===' ')useGear();
-
- if(k==='q'){
-
-  gear=
-   gear==='flash'?'pulse':
-   gear==='pulse'?'flare':
-   'flash';
-
-  updateHUD();
- }
-});
-
-addEventListener('keyup',e=>{
- keysDown[e.key.toLowerCase()]=false;
-});
-
-let pointerLocked=false;
-
-canvas.addEventListener('click',()=>{
-
- if(gameOn&&!ended){
-  canvas.requestPointerLock?.();
- }
-});
-
-document.addEventListener('pointerlockchange',()=>{
- pointerLocked=document.pointerLockElement===canvas;
-});
-
-document.addEventListener('mousemove',e=>{
-
- if(!pointerLocked)return;
-
- yaw-=e.movementX*.0022;
- pitch-=e.movementY*.0018;
-
- pitch=Math.max(-.8,Math.min(.8,pitch));
-});
-
-function endGame(win){
-
- ended=true;
-
- document.exitPointerLock?.();
-
- document.querySelector('#overlay').style.display='flex';
-
- document.querySelector('#panel').innerHTML=win?
-
- '<h2>VOCÊ ESCAPOU</h2>'+
- '<p>Você conseguiu sair da casa. O silêncio lá fora parece estranho demais.</p>'+
- '<button onclick="location.reload()">JOGAR NOVAMENTE</button>':
-
- '<h2>A CRIATURA TE ALCANÇOU</h2>'+
- '<p>A casa venceu desta vez.</p>'+
- '<button onclick="location.reload()">TENTAR NOVAMENTE</button>';
-}
-
-function update(dt){
-
- if(!gameOn||ended)return;
-
- elapsed+=dt;
-
- const forward=new THREE.Vector3(
-  -Math.sin(yaw),0,-Math.cos(yaw)
- );
-
- const right=new THREE.Vector3(
-  Math.cos(yaw),0,-Math.sin(yaw)
- );
-
- let move=new THREE.Vector3();
-
- if(keysDown.w||keysDown.arrowup){
-  move.add(forward);
- }
-
- if(keysDown.s||keysDown.arrowdown){
-  move.sub(forward);
- }
-
- if(keysDown.d||keysDown.arrowright){
-  move.add(right);
- }
-
- if(keysDown.a||keysDown.arrowleft){
-  move.sub(right);
- }
-
- if(move.lengthSq()>0){
-
-  move.normalize().multiplyScalar(
-   (keysDown.shift?0.075:0.045)*60*dt
-  );
-
-  playerPos.add(move);
- }
-
- playerPos.x=THREE.MathUtils.clamp(
-  playerPos.x,-8.8,8.8
- );
-
- playerPos.z=THREE.MathUtils.clamp(
-  playerPos.z,-4.8,4.8
- );
-
- const nearDoor=rooms[roomIndex].doors.some(
-  d=>Math.hypot(
-   playerPos.x-d.x,
-   playerPos.z-d.z
-  )<1.8
- );
-
- if(!nearDoor){
-
-  if(Math.abs(playerPos.x)>8.3){
-   playerPos.x=Math.sign(playerPos.x)*8.3;
-  }
-
-  if(Math.abs(playerPos.z)>4.3){
-   playerPos.z=Math.sign(playerPos.z)*4.3;
-  }
- }
-
- if(stun>0){
-
-  stun-=dt;
-
- }else{
-
-  const delta=playerPos.clone().sub(monsterPos);
-  const d=delta.length();
-
-  if(d<12){
-   delta.normalize();
-   monsterPos.add(
-    delta.multiplyScalar(.027*60*dt)
-   );
-  }
-
-  if(d<1.15){
-
-   damageTimer+=dt;
-
-   if(damageTimer>.65){
-    health-=9;
-    damageTimer=0;
-    say('A criatura está te atacando!');
-   }
-
-  }else{
-
-   damageTimer=0;
-  }
- }
-
- monster.position.set(
-  monsterPos.x,
-  0,
-  monsterPos.z
- );
-
- monster.lookAt(
-  playerPos.x,
-  0,
-  playerPos.z
- );
-
- if(health<=0){
-
-  health=0;
-  updateHUD();
-  endGame(false);
- }
-
- if(roomIndex===8&&playerPos.z<-3.8){
-  endGame(true);
- }
-
- updateHUD();
-}
-
-const clock=new THREE.Clock();
-
-const flashlight=new THREE.SpotLight(
- 0xffe7c5,
- 95,
- 15,
- Math.PI/5,
- .55,
- 1.2
-);
-
-flashlight.position.set(0,1.6,0);
-flashlight.castShadow=true;
-scene.add(flashlight);
-scene.add(flashlight.target);
-
-function animate(){
-
- requestAnimationFrame(animate);
-
- const dt=Math.min(clock.getDelta(),.05);
-
- update(dt);
-
- const direction=new THREE.Vector3(
-  -Math.sin(yaw),
-  0,
-  -Math.cos(yaw)
- );
-
- // Personagem visível em terceira pessoa.
- player.position.set(
-  playerPos.x,
-  0,
-  playerPos.z
- );
-
+"""
+s = s.replace(insert_before, shooting + insert_before)
+
+# Keydown reload; click-to-fire separate from canvas click lock.
+s = s.replace(
+"if(k==='e')interact();\\n if(k===' ')useGear();",
+"if(k==='e')interact();\\n if(k==='r')reloadWeapon();\\n if(k===' ')useGear();"
+)
+s = s.replace(
+"canvas.addEventListener('click',()=>{if(gameOn&&!ended)canvas.requestPointerLock?.();});",
+"canvas.addEventListener('click',()=>{if(gameOn&&!ended){if(!pointerLocked)canvas.requestPointerLock?.();else shoot();}});\\naddEventListener('mousedown',e=>{if(e.button===0&&pointerLocked)shoot();});"
+)
+
+# Replace third-person camera positioning with first-person camera.
+old_camera = """// First-person camera with a visible, realistic-style 3D humanoid enemy.
+ const direction=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
+ // Personagem visível em terceira pessoa, com câmera acompanhando por trás.
+ player.position.set(playerPos.x,0,playerPos.z);
  player.rotation.y=yaw;
-
  const cameraOffset=direction.clone().multiplyScalar(-4.2);
+ camera.position.set(playerPos.x+cameraOffset.x,2.65+pitch*1.5,playerPos.z+cameraOffset.z);
+ camera.lookAt(playerPos.x,1.25,playerPos.z);
+ const flashlightTarget=camera.position.clone().add(direction.multiplyScalar(7));
+ flashlight.position.copy(camera.position);flashlight.target.position.copy(flashlightTarget);"""
+new_camera = """// Câmera na altura dos olhos: primeira pessoa.
+ const direction=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
+ camera.position.set(playerPos.x,1.66,playerPos.z);
+ camera.rotation.order='YXZ';
+ camera.rotation.set(pitch,yaw,0);
+ const flashlightTarget=camera.position.clone().add(direction.clone().multiplyScalar(7));
+ flashlight.position.copy(camera.position);flashlight.target.position.copy(flashlightTarget);"""
+s = s.replace(old_camera,new_camera)
 
- camera.position.set(
-  playerPos.x+cameraOffset.x,
-  2.65+pitch*1.5,
-  playerPos.z+cameraOffset.z
- );
+# Timers, reload completion, and monster death handling.
+s = s.replace(
+"if(!gameOn||ended)return;\\n elapsed+=dt;",
+"""if(!gameOn||ended)return;
+ elapsed+=dt;
+ shootCooldown=Math.max(0,shootCooldown-dt);
+ if(reloadTimer>0){
+  reloadTimer-=dt;
+  if(reloadTimer<=0){
+   const needed=12-ammo,loaded=Math.min(needed,reserveAmmo);
+   ammo+=loaded;reserveAmmo-=loaded;say('Blaster recarregado.');
+   updateHUD();
+  }
+ }"""
+)
 
- camera.lookAt(
-  playerPos.x,
-  1.25,
-  playerPos.z
- );
+# First-person start text and ensure no player mesh appears.
+s = s.replace(
+"monster.visible=true;\\n // Monster only becomes visible when close enough or illuminated.",
+"monster.visible=true;\\n // Monster only becomes visible when close enough or illuminated."
+)
 
- const flashlightTarget=camera.position.clone().add(
-  direction.multiplyScalar(7)
- );
+# Make monster hit state visible and don't let dead monster continue pursuit.
+s = s.replace(
+"if(stun>0)stun-=dt;\\n else{",
+"if(stun>0)stun-=dt;\\n else if(monsterHP>0){"
+)
 
- flashlight.position.copy(camera.position);
- flashlight.target.position.copy(flashlightTarget);
-
- monster.visible=monsterPos.distanceTo(playerPos)<8;
-
- renderer.render(scene,camera);
-}
-
-buildRoom();
-updateHUD();
-
-document.querySelector('#start').addEventListener('click',()=>{
-
- gameOn=true;
-
- document.querySelector('#overlay').style.display='none';
-
- canvas.requestPointerLock?.();
-
- say('A casa está escura. Encontre as chaves.');
-});
-
-addEventListener('resize',()=>{
-
- const h=innerHeight-94;
-
- renderer.setSize(innerWidth,h);
-
- camera.aspect=innerWidth/h;
- camera.updateProjectionMatrix();
-});
-
-animate();
-
-</script>
-</body>
-</html>
+# Add food item to final room? keep exit empty.
+p.write_text(s)
+print("Atualizado:", p, "bytes:", p.stat().st_size)
