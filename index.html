@@ -3,860 +3,1072 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>A Casa do Outro Lado</title>
-
+<title>A Casa do Outro Lado 3D</title>
 <style>
 *{box-sizing:border-box}
-
-body{
- margin:0;
- background:#08090d;
- color:white;
- font-family:Arial,sans-serif;
- display:flex;
- justify-content:center;
- align-items:center;
- min-height:100vh;
-}
-
-#container{width:95%;max-width:1000px}
-
-h1{text-align:center;color:#b9a9b9;letter-spacing:4px}
-
-canvas{
- width:100%;
- background:#111;
- border:2px solid #444;
- display:block;
-}
-
-#hud{
- display:flex;
- flex-wrap:wrap;
- gap:8px;
- padding:10px;
- background:#171922;
-}
-
-.info{
- background:#292d39;
- padding:8px;
- border-radius:5px;
- font-size:13px;
-}
-
-#message{flex:1;color:#e8c78c}
-
-#overlay{
- position:absolute;
- inset:0;
- background:rgba(0,0,0,.94);
- display:flex;
- justify-content:center;
- align-items:center;
- text-align:center;
- padding:20px;
-}
-
-#panel{max-width:500px}
-
-#panel h2{color:#b83240;font-size:30px}
-
-button{
- padding:14px 25px;
- background:#9b252f;
- color:white;
- border:0;
- cursor:pointer;
- font-weight:bold;
-}
-
-#gamebox{position:relative}
-
+body{margin:0;background:#08090d;color:#eee;font-family:Arial,sans-serif}
+#top{padding:10px 16px;background:#11131a;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+h1{font-size:18px;letter-spacing:3px;margin:0;color:#d8d0d0}
+#hud{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+.pill{background:#252936;border:1px solid #414758;border-radius:5px;padding:6px 9px;font-size:12px}
+#game{width:100vw;height:calc(100vh - 94px);min-height:380px;display:block}
+#help{position:fixed;bottom:8px;left:10px;background:#090a0dcc;padding:8px 11px;border:1px solid #45404a;border-radius:5px;font-size:12px;color:#ddd}
+#message{position:fixed;bottom:8px;right:10px;max-width:48vw;background:#090a0dcc;padding:8px 11px;border:1px solid #66554a;border-radius:5px;color:#f0d5a0;font-size:12px}
+#overlay{position:fixed;inset:0;background:#05060bea;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;z-index:5}
+#panel{max-width:550px}
+#panel h2{font-size:30px;letter-spacing:2px;color:#d9c6bd}
+#panel p{line-height:1.6;color:#ccc}
+button{background:#9b3039;color:white;border:0;padding:13px 24px;font-weight:bold;cursor:pointer}
 </style>
 </head>
-
 <body>
 
-<div id="container">
+<div id="top">
+<h1>A CASA DO OUTRO LADO · 3D</h1>
+<div id="hud">
+<span class="pill" id="room">Entrada</span>
+<span class="pill" id="health">Vida: 100</span>
+<span class="pill" id="keys">Chaves: 0/3</span>
+<span class="pill" id="gear">Lanterna</span>
+<span class="pill" id="phase">Fase: 1/4</span>
+</div>
+</div>
 
-<h1>A CASA DO OUTRO LADO</h1>
+<canvas id="game"></canvas>
 
-<div id="gamebox">
+<div id="help">
+WASD mover · Mouse olhar · E interagir · Q trocar equipamento · Espaço usar · Shift correr
+</div>
 
-<canvas id="game" width="800" height="500"></canvas>
+<div id="message">Encontre as chaves e escape.</div>
 
 <div id="overlay">
 <div id="panel">
 <h2>A CASA ESTÁ ACORDADA</h2>
-
-<p>Você acordou em uma casa abandonada. Explore os cômodos, encontre as três chaves e escape da criatura.</p>
-
 <p>
-WASD: Movimentar<br>
-E: Interagir<br>
-Q: Trocar equipamento<br>
-ESPAÇO: Usar equipamento
+Explore a casa em terceira pessoa. Seu personagem humanoide aparece no cenário 3D.
+Encontre três chaves, recolha equipamentos e fuja da criatura que ronda os corredores.
 </p>
-
-<button onclick="startGame()">ENTRAR NA CASA</button>
+<p>Use WASD para andar, mouse para olhar e E para interagir.</p>
+<button id="start">ENTRAR NA CASA</button>
 </div>
 </div>
 
-</div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 
-<div id="hud">
-<div class="info" id="room">Entrada</div>
-<div class="info" id="health">Vida: 100</div>
-<div class="info" id="keys">Chaves: 0/3</div>
-<div class="info" id="equipment">Lanterna</div>
-<div class="info" id="phase">Fase: 1/4</div>
-<div class="info" id="message">Encontre a saída.</div>
-</div>
+const canvas=document.querySelector('#game');
 
-</div>
+const renderer=new THREE.WebGLRenderer({
+ canvas,
+ antialias:true
+});
 
-<script>
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.setSize(innerWidth,innerHeight-94);
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
 
-const canvas=document.getElementById("game");
-const ctx=canvas.getContext("2d");
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x090a0e);
+scene.fog=new THREE.FogExp2(0x090a0e,.035);
+
+const camera=new THREE.PerspectiveCamera(
+ 72,
+ innerWidth/(innerHeight-94),
+ .1,
+ 100
+);
+
+camera.position.set(0,1.65,5);
+
+const ambient=new THREE.HemisphereLight(
+ 0x9aa4bd,
+ 0x171018,
+ .38
+);
+scene.add(ambient);
+
+const moon=new THREE.DirectionalLight(0x8794b9,.55);
+moon.position.set(-5,9,4);
+moon.castShadow=true;
+scene.add(moon);
+
+const mat=(color,rough=.9,metal=0)=>
+ new THREE.MeshStandardMaterial({
+  color,
+  roughness:rough,
+  metalness:metal
+ });
+
+const floorMat=mat(0x34323a);
+const wallMat=mat(0x48434a);
+const wood=mat(0x49352e);
+const darkWood=mat(0x241c20);
+const metal=mat(0x666a72,.45,.65);
+
+const playerMat=mat(0x303d4b);
+const skin=mat(0xb98569);
+const pants=mat(0x20252d);
+const shoe=mat(0x111318);
+const monsterMat=mat(0x241018);
+
+const eyeMat=new THREE.MeshBasicMaterial({
+ color:0xff263d
+});
 
 const rooms=[
-
-{
- name:"Entrada",
- doors:[{x:760,y:220,to:1}],
- items:[
- {x:150,y:150,type:"battery",name:"Pilha"},
- {x:300,y:350,type:"note",name:"Bilhete"}
- ]
-},
-
-{
- name:"Sala",
- doors:[
- {x:20,y:220,to:0},
- {x:760,y:220,to:2},
- {x:390,y:20,to:3}
- ],
- items:[
- {x:200,y:150,type:"pulse",name:"Pulso elétrico"},
- {x:550,y:350,type:"battery",name:"Pilha"}
- ]
-},
-
-{
- name:"Cozinha",
- doors:[
- {x:20,y:220,to:1},
- {x:760,y:220,to:4}
- ],
- items:[
- {x:200,y:320,type:"key",name:"Chave enferrujada"},
- {x:550,y:150,type:"snack",name:"Comida"}
- ]
-},
-
-{
- name:"Corredor",
- doors:[
- {x:390,y:460,to:1},
- {x:390,y:20,to:5},
- {x:760,y:220,to:6}
- ],
- items:[
- {x:600,y:350,type:"flare",name:"Sinalizador"},
- {x:180,y:180,type:"note",name:"Bilhete"}
- ]
-},
-
-{
- name:"Despensa",
- doors:[
- {x:20,y:220,to:2}
- ],
- items:[
- {x:580,y:300,type:"key",name:"Chave azul"},
- {x:250,y:140,type:"battery",name:"Pilha"}
- ]
-},
-
-{
- name:"Quarto",
- doors:[
- {x:390,y:460,to:3}
- ],
- items:[
- {x:600,y:160,type:"key",name:"Chave preta"},
- {x:180,y:330,type:"pulse",name:"Pulso elétrico"}
- ]
-},
-
-{
- name:"Escritório",
- doors:[
- {x:20,y:220,to:3},
- {x:760,y:220,to:7,locked:2}
- ],
- items:[
- {x:250,y:150,type:"note",name:"Bilhete"},
- {x:570,y:340,type:"battery",name:"Pilha"}
- ]
-},
-
-{
- name:"Porão",
- doors:[
- {x:20,y:220,to:6},
- {x:390,y:20,to:8,locked:3}
- ],
- items:[
- {x:210,y:300,type:"flare",name:"Sinalizador"},
- {x:570,y:130,type:"battery",name:"Pilha"}
- ]
-},
-
-{
- name:"Saída",
- doors:[
- {x:390,y:460,to:7}
- ],
- items:[]
-}
-
+ {
+  name:'Entrada',
+  doors:[
+   {x:9,z:0,to:1,side:'right'}
+  ],
+  items:[
+   {x:-4,z:-2,type:'battery',label:'Pilha'},
+   {x:3,z:3,type:'note',label:'Bilhete'}
+  ]
+ },
+ {
+  name:'Sala',
+  doors:[
+   {x:-9,z:0,to:0,side:'left'},
+   {x:9,z:0,to:2,side:'right'},
+   {x:0,z:-5,to:3,side:'back'}
+  ],
+  items:[
+   {x:-4,z:-2,type:'pulse',label:'Pulso elétrico'},
+   {x:4,z:3,type:'battery',label:'Pilha'}
+  ]
+ },
+ {
+  name:'Cozinha',
+  doors:[
+   {x:-9,z:0,to:1,side:'left'},
+   {x:9,z:0,to:4,side:'right'}
+  ],
+  items:[
+   {x:-3,z:3,type:'key',label:'Chave enferrujada'},
+   {x:4,z:-3,type:'snack',label:'Comida'}
+  ]
+ },
+ {
+  name:'Corredor',
+  doors:[
+   {x:0,z:5,to:1,side:'front'},
+   {x:0,z:-5,to:5,side:'back'},
+   {x:9,z:0,to:6,side:'right'}
+  ],
+  items:[
+   {x:5,z:3,type:'flare',label:'Sinalizador'},
+   {x:-5,z:-2,type:'note',label:'Bilhete'}
+  ]
+ },
+ {
+  name:'Despensa',
+  doors:[
+   {x:-9,z:0,to:2,side:'left'}
+  ],
+  items:[
+   {x:4,z:3,type:'key',label:'Chave azul'},
+   {x:-4,z:-3,type:'battery',label:'Pilha'}
+  ]
+ },
+ {
+  name:'Quarto',
+  doors:[
+   {x:0,z:5,to:3,side:'front'}
+  ],
+  items:[
+   {x:4,z:-3,type:'key',label:'Chave preta'},
+   {x:-4,z:3,type:'pulse',label:'Pulso elétrico'}
+  ]
+ },
+ {
+  name:'Escritório',
+  doors:[
+   {x:-9,z:0,to:3,side:'left'},
+   {x:9,z:0,to:7,side:'right',locked:2}
+  ],
+  items:[
+   {x:-4,z:-3,type:'note',label:'Bilhete'},
+   {x:4,z:3,type:'battery',label:'Pilha'}
+  ]
+ },
+ {
+  name:'Porão',
+  doors:[
+   {x:-9,z:0,to:6,side:'left'},
+   {x:0,z:-5,to:8,side:'back',locked:3}
+  ],
+  items:[
+   {x:-4,z:3,type:'flare',label:'Sinalizador'},
+   {x:4,z:-3,type:'battery',label:'Pilha'}
+  ]
+ },
+ {
+  name:'Saída',
+  doors:[
+   {x:0,z:5,to:7,side:'front'}
+  ],
+  items:[]
+ }
 ];
 
-// JOGADOR
-
-let player={
- x:100,
- y:250,
- speed:3,
- health:100,
- radius:13
-};
-
-// MONSTRO
-
-let monster={
- x:650,
- y:250,
- speed:1.3,
- radius:18,
- stun:0
-};
-
-// ESTADO DO JOGO
-
-let currentRoom=0;
+let roomIndex=0;
 let keys=0;
+let health=100;
+let gear='flash';
 
 let inventory={
  pulse:0,
  flare:0
 };
 
-let equipment="flash";
+let collected=new Set();
+let stun=0;
+let damageTimer=0;
+let gameOn=false;
+let ended=false;
+let elapsed=0;
 
-let collected=[];
-let gameStarted=false;
-let gameOver=false;
-let won=false;
+const roomGroup=new THREE.Group();
+scene.add(roomGroup);
 
-let cooldown=0;
-let time=0;
+const doorMeshes=[];
+const itemMeshes=[];
 
-const pressed={};
+function box(
+ parent,x,y,z,
+ sx,sy,sz,
+ material,
+ cast=true
+){
+ const m=new THREE.Mesh(
+  new THREE.BoxGeometry(sx,sy,sz),
+  material
+ );
 
-function distance(a,b){
- return Math.hypot(a.x-b.x,a.y-b.y);
+ m.position.set(x,y,z);
+ m.castShadow=cast;
+ m.receiveShadow=true;
+ parent.add(m);
+
+ return m;
 }
 
-function message(text){
- document.getElementById("message").textContent=text;
+function makeHumanoid(isMonster=false){
+
+ const root=new THREE.Group();
+
+ const bodyMat=isMonster?monsterMat:playerMat;
+ const legMat=isMonster?monsterMat:pants;
+ const armMat=isMonster?monsterMat:playerMat;
+
+ const torso=new THREE.Mesh(
+  new THREE.CapsuleGeometry(
+   isMonster?.34:.25,
+   isMonster?.85:.65,
+   5,
+   8
+  ),
+  bodyMat
+ );
+
+ torso.position.y=1.35;
+ torso.castShadow=true;
+ root.add(torso);
+
+ const head=new THREE.Mesh(
+  new THREE.SphereGeometry(
+   isMonster?.27:.22,
+   16,
+   12
+  ),
+  isMonster?monsterMat:skin
+ );
+
+ head.position.y=2.05;
+ head.castShadow=true;
+ root.add(head);
+
+ const hair=new THREE.Mesh(
+  new THREE.SphereGeometry(.235,14,8),
+  isMonster?monsterMat:mat(0x17171b)
+ );
+
+ hair.scale.set(1,.55,1);
+ hair.position.set(0,2.17,0);
+ root.add(hair);
+
+ for(const side of [-1,1]){
+
+  const arm=new THREE.Mesh(
+   new THREE.CapsuleGeometry(
+    isMonster?.13:.105,
+    .58,
+    4,
+    8
+   ),
+   armMat
+  );
+
+  arm.position.set(
+   side*(isMonster?.43:.34),
+   1.38,
+   0
+  );
+
+  arm.rotation.z=-side*.13;
+  arm.castShadow=true;
+  root.add(arm);
+
+  const leg=new THREE.Mesh(
+   new THREE.CapsuleGeometry(
+    isMonster?.16:.12,
+    .68,
+    4,
+    8
+   ),
+   legMat
+  );
+
+  leg.position.set(side*.15,.48,0);
+  leg.castShadow=true;
+  root.add(leg);
+
+  const foot=new THREE.Mesh(
+   new THREE.BoxGeometry(.22,.13,.38),
+   isMonster?monsterMat:shoe
+  );
+
+  foot.position.set(side*.15,.12,-.07);
+  root.add(foot);
+ }
+
+ if(isMonster){
+
+  for(const side of [-1,1]){
+
+   const eye=new THREE.Mesh(
+    new THREE.SphereGeometry(.055,8,8),
+    eyeMat
+   );
+
+   eye.position.set(
+    side*.105,
+    2.06,
+    -.22
+   );
+
+   root.add(eye);
+  }
+ }
+
+ return root;
+}
+
+const monster=makeHumanoid(true);
+monster.scale.set(1.15,1.15,1.15);
+scene.add(monster);
+
+const player=makeHumanoid(false);
+player.visible=true;
+scene.add(player);
+
+const playerPos=new THREE.Vector3(0,0,4.0);
+const monsterPos=new THREE.Vector3(5,0,-2);
+
+let yaw=0;
+let pitch=0;
+
+function buildRoom(){
+
+ while(roomGroup.children.length){
+  const c=roomGroup.children[0];
+  roomGroup.remove(c);
+ }
+
+ doorMeshes.length=0;
+ itemMeshes.length=0;
+
+ const r=rooms[roomIndex];
+
+ const floor=new THREE.Mesh(
+  new THREE.PlaneGeometry(20,12),
+  floorMat
+ );
+
+ floor.rotation.x=-Math.PI/2;
+ floor.receiveShadow=true;
+ roomGroup.add(floor);
+
+ const opening=2.2;
+
+ const sideDoors=r.doors.filter(
+  d=>d.side==='left'||d.side==='right'
+ );
+
+ const endDoors=r.doors.filter(
+  d=>d.side==='front'||d.side==='back'
+ );
+
+ for(const side of ['left','right']){
+
+  const x=side==='left'?-10:10;
+
+  if(sideDoors.some(d=>d.side===side)){
+
+   box(
+    roomGroup,
+    x,2,-(6+opening/2)/2,
+    .35,4,6-opening/2,
+    wallMat
+   );
+
+   box(
+    roomGroup,
+    x,2,(6+opening/2)/2,
+    .35,4,6-opening/2,
+    wallMat
+   );
+
+   box(
+    roomGroup,
+    x,3.45,0,
+    .35,1.1,opening,
+    wallMat
+   );
+
+  }else{
+
+   box(
+    roomGroup,
+    x,2,0,
+    .35,4,12,
+    wallMat
+   );
+  }
+ }
+
+ for(const side of ['back','front']){
+
+  const z=side==='back'?-6:6;
+
+  if(endDoors.some(d=>d.side===side)){
+
+   box(
+    roomGroup,
+    -(10+opening/2)/2,2,z,
+    10-opening/2,4,.35,
+    wallMat
+   );
+
+   box(
+    roomGroup,
+    (10+opening/2)/2,2,z,
+    10-opening/2,4,.35,
+    wallMat
+   );
+
+   box(
+    roomGroup,
+    0,3.45,z,
+    opening,1.1,.35,
+    wallMat
+   );
+
+  }else{
+
+   box(
+    roomGroup,
+    0,2,z,
+    20,4,.35,
+    wallMat
+   );
+  }
+ }
+
+ for(const d of r.doors){
+
+  let mesh;
+
+  const locked=!!(d.locked&&keys<d.locked);
+
+  if(d.side==='left'||d.side==='right'){
+
+   const x=d.side==='left'?-9.78:9.78;
+
+   box(roomGroup,x,1.35,-1.1,.18,2.7,.16,wood);
+   box(roomGroup,x,1.35,1.1,.18,2.7,.16,wood);
+   box(roomGroup,x,2.8,0,.18,.16,2.2,wood);
+
+   mesh=box(
+    roomGroup,
+    x,1.25,-.55,
+    .10,2.5,1.05,
+    locked?darkWood:wood
+   );
+
+  }else{
+
+   const z=d.side==='back'?-5.78:5.78;
+
+   box(roomGroup,-1.1,1.35,z,.16,2.7,.18,wood);
+   box(roomGroup,1.1,1.35,z,.16,2.7,.18,wood);
+   box(roomGroup,0,2.8,z,2.2,.16,.18,wood);
+
+   mesh=box(
+    roomGroup,
+    -.55,1.25,z,
+    1.05,2.5,.10,
+    locked?darkWood:wood
+   );
+  }
+
+  mesh.userData={
+   kind:'door',
+   door:d
+  };
+
+  doorMeshes.push(mesh);
+ }
+
+ if(roomIndex===2){
+
+  box(roomGroup,-6,.55,-3,2.5,1.1,1.2,darkWood);
+  box(roomGroup,5,.8,3,2.2,1.6,1.2,wood);
+  box(roomGroup,0,.5,-4,3,1,1,metal);
+ }
+
+ if(roomIndex===5){
+
+  box(roomGroup,-5,.5,-3,3,1,2,wood);
+  box(roomGroup,5,.45,3,3,.9,2,darkWood);
+ }
+
+ if(roomIndex===6){
+
+  box(roomGroup,-5,.65,-3,3,1.3,1,wood);
+  box(roomGroup,5,.5,3,3,1,1,metal);
+ }
+
+ if(roomIndex===7){
+
+  box(roomGroup,-6,.8,-3,2,1.6,2,darkWood);
+  box(roomGroup,6,.5,3,2,1,2,wood);
+ }
+
+ const lamp=new THREE.PointLight(
+  roomIndex===7?0x8a4050:0xb7a6a0,
+  roomIndex===7?12:18,
+  13
+ );
+
+ lamp.position.set(0,3.5,0);
+ roomGroup.add(lamp);
+
+ r.items.forEach((it,i)=>{
+
+  const id=roomIndex+'-'+i;
+
+  if(collected.has(id))return;
+
+  const color=
+   it.type==='key'?0xe7c84c:
+   it.type==='pulse'?0x55ddeb:
+   it.type==='flare'?0xff8b45:
+   it.type==='note'?0xd6c9a7:
+   0x8cc39d;
+
+  const mesh=new THREE.Mesh(
+   new THREE.IcosahedronGeometry(.22,0),
+   new THREE.MeshStandardMaterial({
+    color,
+    emissive:color,
+    emissiveIntensity:.35
+   })
+  );
+
+  mesh.position.set(it.x,.35,it.z);
+  mesh.castShadow=true;
+
+  mesh.userData={
+   kind:'item',
+   item:it,
+   index:i
+  };
+
+  roomGroup.add(mesh);
+  itemMeshes.push(mesh);
+
+  const light=new THREE.PointLight(color,1.2,2);
+  light.position.copy(mesh.position);
+  roomGroup.add(light);
+ });
 }
 
 function updateHUD(){
 
- document.getElementById("room").textContent=
- "Cômodo: "+rooms[currentRoom].name;
+ document.querySelector('#room').textContent=
+  'Cômodo: '+rooms[roomIndex].name;
 
- document.getElementById("health").textContent=
- "Vida: "+Math.max(0,Math.floor(player.health));
+ document.querySelector('#health').textContent=
+  'Vida: '+Math.max(0,Math.ceil(health));
 
- document.getElementById("keys").textContent=
- "Chaves: "+keys+"/3";
+ document.querySelector('#keys').textContent=
+  'Chaves: '+keys+'/3';
 
- document.getElementById("equipment").textContent=
- "Equipamento: "+
- (equipment==="flash"?"Lanterna":
- equipment==="pulse"?"Pulso elétrico":"Sinalizador");
+ document.querySelector('#gear').textContent=
+  'Equipamento: '+
+  (gear==='flash'?'Lanterna':
+   gear==='pulse'?'Pulso elétrico':'Sinalizador');
 
- document.getElementById("phase").textContent=
- "Fase: "+Math.min(4,Math.max(1,Math.ceil((currentRoom+1)/2)))+"/4";
+ document.querySelector('#phase').textContent=
+  'Fase: '+Math.min(4,Math.floor(roomIndex/2)+1)+'/4';
 }
 
-// INICIAR
+function say(t){
+ document.querySelector('#message').textContent=t;
+}
 
-function startGame(){
+function enterRoom(to,door){
 
- gameStarted=true;
+ roomIndex=to;
 
- document.getElementById("overlay").style.display="none";
+ if(door.side==='left'){
+  playerPos.set(7.5,0,0);
+ }else if(door.side==='right'){
+  playerPos.set(-7.5,0,0);
+ }else if(door.side==='back'){
+  playerPos.set(0,0,4.5);
+ }else{
+  playerPos.set(0,0,-4.5);
+ }
 
- message("Explore a casa. Encontre as três chaves.");
+ monsterPos.set(
+  playerPos.x>0?-6:6,
+  0,
+  playerPos.z>0?-4:4
+ );
 
+ monster.position.copy(monsterPos);
+
+ buildRoom();
+
+ say('Você entrou em '+rooms[to].name+'.');
  updateHUD();
 }
-
-// TROCAR DE CÔMODO
-
-function changeRoom(door){
-
- currentRoom=door.to;
-
- if(door.x<30){
-  player.x=740;
-  player.y=250;
- }
- else if(door.x>740){
-  player.x=60;
-  player.y=250;
- }
- else if(door.y<30){
-  player.x=400;
-  player.y=440;
- }
- else{
-  player.x=400;
-  player.y=60;
- }
-
- // A criatura acompanha o jogador entre os cômodos.
- monster.x=player.x<400?720:80;
- monster.y=player.y<250?420:80;
-
- message("Você entrou em: "+rooms[currentRoom].name);
-
- updateHUD();
-}
-
-// INTERAÇÃO
 
 function interact(){
 
- if(!gameStarted||gameOver||won)return;
+ let best=null;
+ let bestD=2.0;
 
- let nearest=null;
- let nearestDistance=55;
+ for(const m of [...itemMeshes,...doorMeshes]){
 
- rooms[currentRoom].items.forEach((item,index)=>{
+  const p=m.position.clone();
 
-  let id=currentRoom+"-"+index;
+  const d=Math.hypot(
+   p.x-playerPos.x,
+   p.z-playerPos.z
+  );
 
-  if(collected.includes(id))return;
-
-  let d=distance(player,item);
-
-  if(d<nearestDistance){
-   nearest={type:"item",item,index};
-   nearestDistance=d;
+  if(d<bestD){
+   best=m;
+   bestD=d;
   }
+ }
 
- });
-
- rooms[currentRoom].doors.forEach(door=>{
-
-  let d=distance(player,door);
-
-  if(d<nearestDistance){
-   nearest={type:"door",door};
-   nearestDistance=d;
-  }
-
- });
-
- if(!nearest){
-  message("Não existe nada para interagir aqui.");
+ if(!best){
+  say('Não há nada ao alcance.');
   return;
  }
 
- if(nearest.type==="door"){
+ if(best.userData.kind==='door'){
 
-  let door=nearest.door;
+  const d=best.userData.door;
 
-  if(door.locked&&keys<door.locked){
-   message("Você precisa de "+door.locked+" chaves.");
+  if(d.locked&&keys<d.locked){
+   say('Esta porta exige '+d.locked+' chaves.');
    return;
   }
 
-  if(currentRoom===7&&door.to===8&&keys<3){
-   message("Encontre as três chaves para abrir a saída.");
+  if(roomIndex===7&&d.to===8&&keys<3){
+   say('A saída está selada. Encontre as três chaves.');
    return;
   }
 
-  changeRoom(door);
+  enterRoom(d.to,d);
   return;
  }
 
- let item=nearest.item;
- let id=currentRoom+"-"+nearest.index;
+ const it=best.userData.item;
+ const id=roomIndex+'-'+best.userData.index;
 
- collected.push(id);
+ collected.add(id);
 
- switch(item.type){
-
-  case "key":
-   keys++;
-   message("Você encontrou uma chave!");
-   break;
-
-  case "pulse":
-   inventory.pulse++;
-   message("Pulso elétrico coletado!");
-   break;
-
-  case "flare":
-   inventory.flare++;
-   message("Sinalizador coletado!");
-   break;
-
-  case "battery":
-   player.health=Math.min(100,player.health+10);
-   message("Você encontrou uma pilha e recuperou energia.");
-   break;
-
-  case "snack":
-   player.health=Math.min(100,player.health+20);
-   message("Você encontrou comida e recuperou vida.");
-   break;
-
-  case "note":
-   message("Bilhete: A criatura não gosta de luz forte.");
-   break;
+ if(it.type==='key'){
+  keys++;
+  say('Chave encontrada!');
  }
 
+ if(it.type==='pulse'){
+  inventory.pulse++;
+  say('Carga de pulso elétrico coletada.');
+ }
+
+ if(it.type==='flare'){
+  inventory.flare++;
+  say('Sinalizador coletado.');
+ }
+
+ if(it.type==='battery'){
+  health=Math.min(100,health+10);
+  say('Pilha encontrada. Você recuperou um pouco de vida.');
+ }
+
+ if(it.type==='snack'){
+  health=Math.min(100,health+20);
+  say('Você encontrou comida.');
+ }
+
+ if(it.type==='note'){
+  say('Bilhete: “A luz é a única coisa que ela teme.”');
+ }
+
+ buildRoom();
  updateHUD();
 }
 
-// EQUIPAMENTOS
+function useGear(){
 
-function useEquipment(){
+ if(gear==='flash'){
 
- if(cooldown>0)return;
-
- if(equipment==="flash"){
-
-  if(distance(player,monster)<190){
-   monster.stun=2;
-   message("A criatura recuou com a luz!");
+  if(monsterPos.distanceTo(playerPos)<5.5){
+   stun=2.2;
+   say('A criatura recuou diante da lanterna!');
   }else{
-   message("Você iluminou o ambiente.");
+   say('A lanterna ilumina o caminho.');
   }
 
- }
+ }else if(gear==='pulse'){
 
- else if(equipment==="pulse"){
-
-  if(inventory.pulse<=0){
-   message("Você não possui cargas de pulso.");
+  if(inventory.pulse<1){
+   say('Você não tem cargas de pulso.');
    return;
   }
 
   inventory.pulse--;
-  monster.stun=4;
+  stun=4;
+  say('Pulso elétrico disparado! A criatura foi paralisada.');
 
-  message("Pulso elétrico disparado!");
- }
+ }else{
 
- else if(equipment==="flare"){
-
-  if(inventory.flare<=0){
-   message("Você não possui sinalizadores.");
+  if(inventory.flare<1){
+   say('Você não tem sinalizadores.');
    return;
   }
 
   inventory.flare--;
-  monster.stun=6;
-
-  message("O sinalizador afastou a criatura!");
+  stun=6;
+  say('O sinalizador afastou a criatura!');
  }
-
- cooldown=0.5;
 
  updateHUD();
 }
 
-// CONTROLES
+const keysDown={};
 
-window.addEventListener("keydown",e=>{
+addEventListener('keydown',e=>{
 
- let key=e.key.toLowerCase();
+ const k=e.key.toLowerCase();
+ keysDown[k]=true;
 
- pressed[key]=true;
-
- if([" ","arrowup","arrowdown","arrowleft","arrowright"].includes(key)){
+ if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(k)){
   e.preventDefault();
  }
 
- if(!gameStarted||gameOver||won)return;
+ if(!gameOn||ended)return;
 
- if(key==="e")interact();
+ if(k==='e')interact();
 
- if(key===" "){
-  useEquipment();
- }
+ if(k===' ')useGear();
 
- if(key==="q"){
+ if(k==='q'){
 
-  if(equipment==="flash")equipment="pulse";
-  else if(equipment==="pulse")equipment="flare";
-  else equipment="flash";
+  gear=
+   gear==='flash'?'pulse':
+   gear==='pulse'?'flare':
+   'flash';
 
   updateHUD();
-
  }
-
 });
 
-window.addEventListener("keyup",e=>{
- pressed[e.key.toLowerCase()]=false;
+addEventListener('keyup',e=>{
+ keysDown[e.key.toLowerCase()]=false;
 });
 
-// MOVIMENTAÇÃO
+let pointerLocked=false;
 
-function movePlayer(){
+canvas.addEventListener('click',()=>{
 
- let dx=0;
- let dy=0;
-
- if(pressed.w||pressed.arrowup)dy--;
- if(pressed.s||pressed.arrowdown)dy++;
- if(pressed.a||pressed.arrowleft)dx--;
- if(pressed.d||pressed.arrowright)dx++;
-
- if(dx!==0||dy!==0){
-
-  let length=Math.hypot(dx,dy);
-
-  dx/=length;
-  dy/=length;
-
-  player.x+=dx*player.speed;
-  player.y+=dy*player.speed;
-
+ if(gameOn&&!ended){
+  canvas.requestPointerLock?.();
  }
+});
 
- player.x=Math.max(30,Math.min(770,player.x));
- player.y=Math.max(30,Math.min(470,player.y));
+document.addEventListener('pointerlockchange',()=>{
+ pointerLocked=document.pointerLockElement===canvas;
+});
 
+document.addEventListener('mousemove',e=>{
+
+ if(!pointerLocked)return;
+
+ yaw-=e.movementX*.0022;
+ pitch-=e.movementY*.0018;
+
+ pitch=Math.max(-.8,Math.min(.8,pitch));
+});
+
+function endGame(win){
+
+ ended=true;
+
+ document.exitPointerLock?.();
+
+ document.querySelector('#overlay').style.display='flex';
+
+ document.querySelector('#panel').innerHTML=win?
+
+ '<h2>VOCÊ ESCAPOU</h2>'+
+ '<p>Você conseguiu sair da casa. O silêncio lá fora parece estranho demais.</p>'+
+ '<button onclick="location.reload()">JOGAR NOVAMENTE</button>':
+
+ '<h2>A CRIATURA TE ALCANÇOU</h2>'+
+ '<p>A casa venceu desta vez.</p>'+
+ '<button onclick="location.reload()">TENTAR NOVAMENTE</button>';
 }
-
-// FINAL DO JOGO
-
-function finishGame(victory){
-
- gameOver=!victory;
- won=victory;
-
- document.getElementById("overlay").style.display="flex";
-
- document.getElementById("panel").innerHTML=victory?
-
- `<h2>VOCÊ ESCAPOU!</h2>
- <p>Você conseguiu escapar da casa. Mas será que a criatura realmente ficou para trás?</p>
- <button onclick="location.reload()">JOGAR NOVAMENTE</button>`
-
- :
-
- `<h2>A CASA TE ENCONTROU</h2>
- <p>A criatura alcançou você. A casa venceu desta vez.</p>
- <button onclick="location.reload()">TENTAR NOVAMENTE</button>`;
-
-}
-
-// ATUALIZAÇÃO
 
 function update(dt){
 
- if(!gameStarted||gameOver||won)return;
+ if(!gameOn||ended)return;
 
- time+=dt;
+ elapsed+=dt;
 
- cooldown=Math.max(0,cooldown-dt);
+ const forward=new THREE.Vector3(
+  -Math.sin(yaw),0,-Math.cos(yaw)
+ );
 
- movePlayer();
+ const right=new THREE.Vector3(
+  Math.cos(yaw),0,-Math.sin(yaw)
+ );
 
- if(monster.stun>0){
+ let move=new THREE.Vector3();
 
-  monster.stun-=dt;
+ if(keysDown.w||keysDown.arrowup){
+  move.add(forward);
+ }
+
+ if(keysDown.s||keysDown.arrowdown){
+  move.sub(forward);
+ }
+
+ if(keysDown.d||keysDown.arrowright){
+  move.add(right);
+ }
+
+ if(keysDown.a||keysDown.arrowleft){
+  move.sub(right);
+ }
+
+ if(move.lengthSq()>0){
+
+  move.normalize().multiplyScalar(
+   (keysDown.shift?0.075:0.045)*60*dt
+  );
+
+  playerPos.add(move);
+ }
+
+ playerPos.x=THREE.MathUtils.clamp(
+  playerPos.x,-8.8,8.8
+ );
+
+ playerPos.z=THREE.MathUtils.clamp(
+  playerPos.z,-4.8,4.8
+ );
+
+ const nearDoor=rooms[roomIndex].doors.some(
+  d=>Math.hypot(
+   playerPos.x-d.x,
+   playerPos.z-d.z
+  )<1.8
+ );
+
+ if(!nearDoor){
+
+  if(Math.abs(playerPos.x)>8.3){
+   playerPos.x=Math.sign(playerPos.x)*8.3;
+  }
+
+  if(Math.abs(playerPos.z)>4.3){
+   playerPos.z=Math.sign(playerPos.z)*4.3;
+  }
+ }
+
+ if(stun>0){
+
+  stun-=dt;
 
  }else{
 
-  let d=distance(player,monster);
+  const delta=playerPos.clone().sub(monsterPos);
+  const d=delta.length();
 
-  // A criatura persegue o jogador.
-
-  if(d<400){
-
-   let dx=(player.x-monster.x)/Math.max(d,1);
-   let dy=(player.y-monster.y)/Math.max(d,1);
-
-   monster.x+=dx*monster.speed;
-   monster.y+=dy*monster.speed;
-
+  if(d<12){
+   delta.normalize();
+   monsterPos.add(
+    delta.multiplyScalar(.027*60*dt)
+   );
   }
 
-  // Ataque da criatura.
+  if(d<1.15){
 
-  if(d<35){
+   damageTimer+=dt;
 
-   player.health-=20*dt;
+   if(damageTimer>.65){
+    health-=9;
+    damageTimer=0;
+    say('A criatura está te atacando!');
+   }
 
-   message("CUIDADO! A CRIATURA ESTÁ TE ATACANDO!");
+  }else{
 
+   damageTimer=0;
   }
-
  }
 
- if(player.health<=0){
-  player.health=0;
-  finishGame(false);
+ monster.position.set(
+  monsterPos.x,
+  0,
+  monsterPos.z
+ );
+
+ monster.lookAt(
+  playerPos.x,
+  0,
+  playerPos.z
+ );
+
+ if(health<=0){
+
+  health=0;
+  updateHUD();
+  endGame(false);
  }
 
- // Verificação da saída.
-
- if(currentRoom===8&&player.y<80){
-  finishGame(true);
+ if(roomIndex===8&&playerPos.z<-3.8){
+  endGame(true);
  }
 
  updateHUD();
 }
 
-// DESENHAR CENÁRIO
-
-function draw(){
-
- ctx.clearRect(0,0,800,500);
-
- // Ambiente
-
- let gradient=ctx.createRadialGradient(
-  400,250,30,
-  400,250,550
- );
-
- gradient.addColorStop(0,"#292b32");
- gradient.addColorStop(1,"#050609");
-
- ctx.fillStyle=gradient;
- ctx.fillRect(0,0,800,500);
-
- // Piso
-
- ctx.strokeStyle="rgba(255,255,255,.04)";
-
- for(let y=40;y<500;y+=40){
-
-  ctx.beginPath();
-  ctx.moveTo(0,y);
-  ctx.lineTo(800,y);
-  ctx.stroke();
-
- }
-
- // Paredes
-
- ctx.fillStyle="#41404a";
-
- ctx.fillRect(0,0,800,12);
- ctx.fillRect(0,488,800,12);
- ctx.fillRect(0,0,12,500);
- ctx.fillRect(788,0,12,500);
-
- // Móveis
-
- ctx.fillStyle="#484047";
-
- if(currentRoom===2){
-  ctx.fillRect(80,80,150,65);
-  ctx.fillRect(520,310,150,80);
- }
-
- if(currentRoom===5){
-  ctx.fillRect(80,100,190,90);
-  ctx.fillRect(520,300,150,80);
- }
-
- if(currentRoom===6){
-  ctx.fillRect(90,100,180,65);
-  ctx.fillRect(520,320,170,65);
- }
-
- if(currentRoom===7){
-  ctx.fillRect(90,80,130,110);
-  ctx.fillRect(560,290,130,100);
- }
-
- // Portas
-
- rooms[currentRoom].doors.forEach(door=>{
-
-  let locked=door.locked&&keys<door.locked;
-
-  ctx.fillStyle=locked?"#702d35":"#98734e";
-
-  ctx.fillRect(door.x-20,door.y-27,40,54);
-
-  ctx.fillStyle="#e6c98b";
-
-  ctx.beginPath();
-  ctx.arc(door.x,door.y,4,0,Math.PI*2);
-  ctx.fill();
-
-  if(distance(player,door)<55){
-
-   ctx.fillStyle="white";
-   ctx.font="13px Arial";
-   ctx.fillText(locked?"TRANCADA":"E: INTERAGIR",door.x-45,door.y-38);
-
-  }
-
- });
-
- // Objetos
-
- rooms[currentRoom].items.forEach((item,index)=>{
-
-  let id=currentRoom+"-"+index;
-
-  if(collected.includes(id))return;
-
-  let colors={
-   key:"#e4ca54",
-   pulse:"#53d8e8",
-   flare:"#ed8954",
-   battery:"#83bd9b",
-   snack:"#b7a16d",
-   note:"#ddd2bd"
-  };
-
-  ctx.fillStyle=colors[item.type]||"white";
-
-  ctx.beginPath();
-  ctx.arc(item.x,item.y,9,0,Math.PI*2);
-  ctx.fill();
-
-  if(distance(player,item)<48){
-
-   ctx.fillStyle="white";
-   ctx.font="12px Arial";
-   ctx.fillText("E: "+item.name,item.x-35,item.y-18);
-
-  }
-
- });
-
- // Criatura
-
- if(monster.stun<=0){
-
-  ctx.fillStyle="#080408";
-
-  ctx.beginPath();
-  ctx.arc(monster.x,monster.y,25,0,Math.PI*2);
-  ctx.fill();
-
-  ctx.fillStyle="#772b38";
-
-  ctx.beginPath();
-  ctx.arc(monster.x,monster.y,18,0,Math.PI*2);
-  ctx.fill();
-
-  ctx.fillStyle="#ffb0a5";
-
-  ctx.fillRect(monster.x-9,monster.y-5,5,4);
-  ctx.fillRect(monster.x+5,monster.y-5,5,4);
-
- }else{
-
-  ctx.fillStyle="#53d8e8";
-
-  ctx.beginPath();
-  ctx.arc(monster.x,monster.y,24,0,Math.PI*2);
-  ctx.fill();
-
- }
-
- // Jogador
-
- ctx.fillStyle="#dce2ee";
-
- ctx.beginPath();
- ctx.arc(player.x,player.y,13,0,Math.PI*2);
- ctx.fill();
-
- // Escuridão e iluminação
-
- ctx.save();
-
- ctx.fillStyle="rgba(0,0,0,.82)";
- ctx.fillRect(0,0,800,500);
-
- ctx.globalCompositeOperation="destination-out";
-
- let radius=equipment==="flash"?200:125;
-
- let light=ctx.createRadialGradient(
-  player.x,player.y,20,
-  player.x,player.y,radius
- );
-
- light.addColorStop(0,"rgba(0,0,0,1)");
- light.addColorStop(1,"rgba(0,0,0,0)");
-
- ctx.fillStyle=light;
-
- ctx.beginPath();
- ctx.arc(player.x,player.y,radius,0,Math.PI*2);
- ctx.fill();
-
- ctx.restore();
-
- // Controles
-
- ctx.fillStyle="rgba(0,0,0,.6)";
- ctx.fillRect(12,12,300,28);
-
- ctx.fillStyle="white";
- ctx.font="12px Arial";
-
- ctx.fillText("WASD: Andar | E: Interagir | Q: Equipamento | ESPAÇO: Usar",20,30);
-
-}
-
-// LOOP PRINCIPAL
-
-let lastTime=0;
-
-function gameLoop(timestamp){
-
- let dt=Math.min((timestamp-lastTime)/1000,0.04);
-
- lastTime=timestamp;
+const clock=new THREE.Clock();
+
+const flashlight=new THREE.SpotLight(
+ 0xffe7c5,
+ 95,
+ 15,
+ Math.PI/5,
+ .55,
+ 1.2
+);
+
+flashlight.position.set(0,1.6,0);
+flashlight.castShadow=true;
+scene.add(flashlight);
+scene.add(flashlight.target);
+
+function animate(){
+
+ requestAnimationFrame(animate);
+
+ const dt=Math.min(clock.getDelta(),.05);
 
  update(dt);
- draw();
 
- requestAnimationFrame(gameLoop);
+ const direction=new THREE.Vector3(
+  -Math.sin(yaw),
+  0,
+  -Math.cos(yaw)
+ );
 
+ // Personagem visível em terceira pessoa.
+ player.position.set(
+  playerPos.x,
+  0,
+  playerPos.z
+ );
+
+ player.rotation.y=yaw;
+
+ const cameraOffset=direction.clone().multiplyScalar(-4.2);
+
+ camera.position.set(
+  playerPos.x+cameraOffset.x,
+  2.65+pitch*1.5,
+  playerPos.z+cameraOffset.z
+ );
+
+ camera.lookAt(
+  playerPos.x,
+  1.25,
+  playerPos.z
+ );
+
+ const flashlightTarget=camera.position.clone().add(
+  direction.multiplyScalar(7)
+ );
+
+ flashlight.position.copy(camera.position);
+ flashlight.target.position.copy(flashlightTarget);
+
+ monster.visible=monsterPos.distanceTo(playerPos)<8;
+
+ renderer.render(scene,camera);
 }
 
+buildRoom();
 updateHUD();
 
-requestAnimationFrame(gameLoop);
+document.querySelector('#start').addEventListener('click',()=>{
+
+ gameOn=true;
+
+ document.querySelector('#overlay').style.display='none';
+
+ canvas.requestPointerLock?.();
+
+ say('A casa está escura. Encontre as chaves.');
+});
+
+addEventListener('resize',()=>{
+
+ const h=innerHeight-94;
+
+ renderer.setSize(innerWidth,h);
+
+ camera.aspect=innerWidth/h;
+ camera.updateProjectionMatrix();
+});
+
+animate();
 
 </script>
-
 </body>
 </html>
