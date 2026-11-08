@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A Casa do Outro Lado</title>
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;background:#08090d;color:#e9e9ee;
+ font-family:Arial,sans-serif;display:flex;
+ min-height:100vh;align-items:center;justify-content:center
+}
+#wrap{width:min(1000px,96vw);padding:14px}
+h1{font-size:30px;letter-spacing:3px;color:#d8d5e5}
+#sub{color:#9696a5;font-size:13px}
+#gamebox{position:relative;border:1px solid #41414d;background:#11131a}
+canvas{display:block;width:100%;height:auto}
+#hud{display:flex;gap:8px;flex-wrap:wrap;padding:10px;background:#171922;font-size:13px}
+.pill{padding:6px 10px;background:#252936;border:1px solid #414758;border-radius:5px}
+#msg{flex:1;min-width:180px;color:#f1d9a2}
+#overlay{
+ position:absolute;inset:0;background:rgba(4,5,9,.92);
+ display:flex;align-items:center;justify-content:center;
+ text-align:center;padding:24px
+}
+#panel{max-width:560px}
+#panel h2{font-size:30px;color:#e8d8bd}
+#panel p{line-height:1.55;color:#c4c4ce}
+button{background:#9b3138;color:white;border:0;padding:12px 20px;font-weight:bold;cursor:pointer}
+</style>
+</head>
+<body>
+<div id="wrap">
+<h1>A CASA DO OUTRO LADO</h1>
+<p id="sub">Terror de sobrevivência. Explore e sobreviva.</p>
+
+<div id="gamebox">
+<canvas id="game" width="800" height="500"></canvas>
+
+<div id="overlay">
+<div id="panel">
+<h2>A CASA ESTÁ ACORDADA</h2>
+<p>Você despertou em uma casa abandonada. Encontre as chaves, descubra a saída e sobreviva à criatura.</p>
+<p><b>WASD:</b> Andar | <b>E:</b> Interagir | <b>Q:</b> Trocar equipamento | <b>Espaço:</b> Usar equipamento</p>
+<button id="start">ENTRAR NA CASA</button>
+</div>
+</div>
+</div>
+
+<div id="hud">
+<span class="pill" id="room">Cômodo: Entrada</span>
+<span class="pill" id="health">Fôlego: 100</span>
+<span class="pill" id="keys">Chaves: 0/3</span>
+<span class="pill" id="gear">Equipamento: Lanterna</span>
+<span class="pill" id="stage">Fase: 1/4</span>
+<span class="pill" id="msg">Encontre uma saída.</span>
+</div>
+</div>
+
+<script>
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+
+const W=800,H=500;
+
+const rooms=[
+{name:'Entrada',doors:[{x:760,y:220,to:1}],items:[
+{x:160,y:160,type:'flash',name:'Lanterna'},
+{x:320,y:330,type:'note',name:'Bilhete'}
+]},
+{name:'Sala',doors:[
+{x:20,y:220,to:0},{x:760,y:220,to:2},{x:390,y:20,to:3}
+],items:[
+{x:220,y:170,type:'battery',name:'Pilha'},
+{x:560,y:350,type:'pulse',name:'Pulso elétrico'}
+]},
+{name:'Cozinha',doors:[
+{x:20,y:220,to:1},{x:760,y:220,to:4}
+],items:[
+{x:220,y:320,type:'key',name:'Chave enferrujada'},
+{x:560,y:150,type:'snack',name:'Lanche'}
+]},
+{name:'Corredor',doors:[
+{x:390,y:460,to:1},{x:390,y:20,to:5},{x:760,y:220,to:6}
+],items:[
+{x:600,y:340,type:'flare',name:'Sinalizador'},
+{x:180,y:180,type:'note',name:'Bilhete'}
+]},
+{name:'Despensa',doors:[
+{x:20,y:220,to:2}
+],items:[
+{x:580,y:300,type:'key',name:'Chave azul'},
+{x:250,y:140,type:'battery',name:'Pilha'}
+]},
+{name:'Quarto',doors:[
+{x:390,y:460,to:3}
+],items:[
+{x:600,y:160,type:'key',name:'Chave preta'},
+{x:180,y:330,type:'pulse',name:'Pulso elétrico'}
+]},
+{name:'Escritório',doors:[
+{x:20,y:220,to:3},{x:760,y:220,to:7,locked:2}
+],items:[
+{x:250,y:150,type:'note',name:'Código rabiscado'},
+{x:570,y:340,type:'battery',name:'Pilha'}
+]},
+{name:'Porão',doors:[
+{x:20,y:220,to:6},{x:390,y:20,to:8,locked:3}
+],items:[
+{x:210,y:300,type:'flare',name:'Sinalizador'},
+{x:570,y:130,type:'key',name:'Chave da saída'}
+]},
+{name:'Saída',doors:[{x:390,y:460,to:7}],items:[]}
+];
+
+let room=0;
+let player={x:110,y:250,r:13,speed:2.6,health:100};
+let monster={x:650,y:250,r:17,stun:0};
+let keys=0;
+let inventory={pulse:0,flare:0};
+let gear='flash';
+let collected=new Set();
+let stage=1;
+let gameState='menu';
+let message='Encontre uma saída.';
+let elapsed=0;
+let cooldown=0;
+
+const held={};
+
+function distance(a,b){
+return Math.hypot(a.x-b.x,a.y-b.y);
+}
+
+function say(t){
+message=t;
+document.getElementById('msg').textContent=t;
+}
+
+function updateHUD(){
+document.getElementById('room').textContent='Cômodo: '+rooms[room].name;
+document.getElementById('health').textContent='Fôlego: '+Math.floor(player.health);
+document.getElementById('keys').textContent='Chaves: '+keys+'/3';
+document.getElementById('gear').textContent='Equipamento: '+gear;
+document.getElementById('stage').textContent='Fase: '+stage+'/4';
+}
+
+function changeRoom(to,door){
+room=to;
+
+if(door.x<30){
+player.x=740;player.y=250;
+}else if(door.x>740){
+player.x=60;player.y=250;
+}else if(door.y<30){
+player.x=400;player.y=440;
+}else{
+player.x=400;player.y=60;
+}
+
+stage=Math.min(4,Math.max(stage,room>=3?2:1));
+
+say('Você entrou em: '+rooms[room].name);
+updateHUD();
+}
+
+function interact(){
+let nearest=null;
+let nd=55;
+
+rooms[room].items.forEach((it,i)=>{
+let id=room+':'+i;
+
+if(!collected.has(id)&&distance(player,it)<nd){
+nearest={...it,index:i};
+nd=distance(player,it);
+}
+});
+
+rooms[room].doors.forEach(d=>{
+if(distance(player,d)<nd){
+nearest={door:d};
+nd=distance(player,d);
+}
+});
+
+if(!nearest){
+say('Nada para interagir.');
+return;
+}
+
+if(nearest.door){
+let d=nearest.door;
+
+if(d.locked&&keys<d.locked){
+say('Você precisa de mais chaves.');
+return;
+}
+
+if(room===7&&d.to===8&&keys<3){
+say('A saída exige três chaves.');
+return;
+}
+
+changeRoom(d.to,d);
+return;
+}
+
+let it=nearest;
+let id=room+':'+it.index;
+collected.add(id);
+
+switch(it.type){
+
+case 'key':
+keys++;
+say('Você encontrou uma chave!');
+break;
+
+case 'pulse':
+inventory.pulse++;
+say('Pulso elétrico coletado.');
+break;
+
+case 'flare':
+inventory.flare++;
+say('Sinalizador coletado.');
+break;
+
+case 'battery':
+player.health=Math.min(100,player.health+8);
+say('Pilha encontrada.');
+break;
+
+case 'snack':
+player.health=Math.min(100,player.health+20);
+say('Você recuperou energia.');
+break;
+
+case 'note':
+say('Bilhete: Não confie no silêncio.');
+break;
+}
+
+updateHUD();
+}
+
+function useGear(){
+
+if(cooldown>0)return;
+
+if(gear==='Lanterna'){
+
+if(distance(player,monster)<180){
+monster.stun=1.8;
+say('A criatura recuou com a luz!');
+}else{
+say('Você iluminou o ambiente.');
+}
+
+}else if(gear==='Pulso elétrico'){
+
+if(inventory.pulse<=0){
+say('Você não possui cargas.');
+return;
+}
+
+inventory.pulse--;
+monster.stun=3.5;
+say('Criatura paralisada!');
+
+}else{
+
+if(inventory.flare<=0){
+say('Você não possui sinalizadores.');
+return;
+}
+
+inventory.flare--;
+monster.stun=5;
+say('A criatura foi afastada!');
+}
+
+cooldown=.5;
+updateHUD();
+}
+
+window.addEventListener('keydown',e=>{
+let k=e.key.toLowerCase();
+held[k]=true;
+
+if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(k)){
+e.preventDefault();
+}
+
+if(gameState!=='playing')return;
+
+if(k==='e')interact();
+
+if(k===' '){
+useGear();
+}
+
+if(k==='q'){
+gear=gear==='Lanterna'?'Pulso elétrico':
+gear==='Pulso elétrico'?'Sinalizador':'Lanterna';
+
+updateHUD();
+say('Equipamento selecionado: '+gear);
+}
+});
+
+window.addEventListener('keyup',e=>{
+held[e.key.toLowerCase()]=false;
+});
+
+function movePlayer(){
+
+let dx=0,dy=0;
+
+if(held.w||held.arrowup)dy--;
+if(held.s||held.arrowdown)dy++;
+if(held.a||held.arrowleft)dx--;
+if(held.d||held.arrowright)dx++;
+
+if(dx||dy){
+let l=Math.hypot(dx,dy);
+dx/=l;dy/=l;
+
+player.x+=dx*player.speed;
+player.y+=dy*player.speed;
+}
+
+player.x=Math.max(30,Math.min(770,player.x));
+player.y=Math.max(30,Math.min(470,player.y));
+}
+
+function endGame(win){
+
+gameState=win?'won':'lost';
+
+document.getElementById('overlay').style.display='flex';
+
+document.getElementById('panel').innerHTML=win?
+'<h2>VOCÊ ESCAPOU!</h2><p>Você conseguiu fugir da casa.</p><button onclick="location.reload()">JOGAR NOVAMENTE</button>':
+'<h2>A CASA TE ENCONTROU</h2><p>A criatura alcançou você.</p><button onclick="location.reload()">TENTAR NOVAMENTE</button>';
+}
+
+function update(dt){
+
+if(gameState!=='playing')return;
+
+elapsed+=dt;
+cooldown=Math.max(0,cooldown-dt);
+
+movePlayer();
+
+if(monster.stun>0){
+monster.stun-=dt;
+}else{
+
+let d=distance(player,monster);
+
+if(d<330){
+
+let dx=(player.x-monster.x)/Math.max(1,d);
+let dy=(player.y-monster.y)/Math.max(1,d);
+
+monster.x+=dx*1.3;
+monster.y+=dy*1.3;
+}
+
+if(d<34){
+player.health-=18*dt;
+say('A criatura está perto!');
+}
+}
+
+if(player.health<=0){
+player.health=0;
+endGame(false);
+}
+
+if(room===8&&player.x>350&&player.x<450&&player.y<65){
+endGame(true);
+}
+
+updateHUD();
+}
+
+function draw(){
+
+ctx.clearRect(0,0,W,H);
+
+let grd=ctx.createRadialGradient(400,250,40,400,250,520);
+grd.addColorStop(0,'#272b34');
+grd.addColorStop(1,'#090b10');
+
+ctx.fillStyle=grd;
+ctx.fillRect(0,0,W,H);
+
+ctx.strokeStyle='rgba(180,185,200,.055)';
+
+for(let y=50;y<480;y+=40){
+ctx.beginPath();
+ctx.moveTo(15,y);
+ctx.lineTo(785,y);
+ctx.stroke();
+}
+
+ctx.fillStyle='#343640';
+ctx.fillRect(0,0,800,12);
+ctx.fillRect(0,488,800,12);
+ctx.fillRect(0,0,12,500);
+ctx.fillRect(788,0,12,500);
+
+// Portas
+rooms[room].doors.forEach(d=>{
+
+let locked=d.locked&&keys<d.locked;
+
+ctx.fillStyle=locked?'#702e34':'#92714b';
+ctx.fillRect(d.x-20,d.y-27,40,54);
+
+ctx.fillStyle='#e3c98a';
+ctx.beginPath();
+ctx.arc(d.x+(d.x<400?10:-10),d.y,3,0,Math.PI*2);
+ctx.fill();
+
+if(distance(player,d)<55){
+ctx.fillStyle='#fff';
+ctx.font='12px Arial';
+ctx.fillText('E: INTERAGIR',d.x-35,d.y-35);
+}
+
+});
+
+// Objetos
+rooms[room].items.forEach((it,i)=>{
+
+let id=room+':'+i;
+
+if(collected.has(id))return;
+
+ctx.fillStyle=
+it.type==='key'?'#e3c85e':
+it.type==='pulse'?'#56d6e8':
+it.type==='flare'?'#e98c54':
+'#8cb7a1';
+
+ctx.beginPath();
+ctx.arc(it.x,it.y,9,0,Math.PI*2);
+ctx.fill();
+
+if(distance(player,it)<48){
+ctx.fillStyle='#eee';
+ctx.font='12px Arial';
+ctx.fillText('E: '+it.name,it.x-35,it.y-17);
+}
+
+});
+
+// Criatura
+if(monster.stun<=0){
+
+ctx.fillStyle='#030407';
+ctx.beginPath();
+ctx.arc(monster.x,monster.y,monster.r+5,0,Math.PI*2);
+ctx.fill();
+
+ctx.fillStyle='#6d2934';
+ctx.beginPath();
+ctx.arc(monster.x,monster.y,monster.r,0,Math.PI*2);
+ctx.fill();
+
+ctx.fillStyle='#ffb2a0';
+ctx.fillRect(monster.x-8,monster.y-4,5,3);
+ctx.fillRect(monster.x+4,monster.y-4,5,3);
+
+}else{
+
+ctx.fillStyle='#66d8e7';
+ctx.beginPath();
+ctx.arc(monster.x,monster.y,monster.r+5,0,Math.PI*2);
+ctx.fill();
+
+}
+
+// Jogador
+ctx.fillStyle='#d6dce7';
+ctx.beginPath();
+ctx.arc(player.x,player.y,player.r,0,Math.PI*2);
+ctx.fill();
+
+// Escuridão
+ctx.save();
+
+ctx.fillStyle='rgba(0,0,0,.68)';
+ctx.fillRect(0,0,W,H);
+
+ctx.globalCompositeOperation='destination-out';
+
+let light=ctx.createRadialGradient(
+player.x,player.y,25,
+player.x,player.y,190
+);
+
+light.addColorStop(0,'rgba(0,0,0,1)');
+light.addColorStop(1,'rgba(0,0,0,0)');
+
+ctx.fillStyle=light;
+ctx.beginPath();
+ctx.arc(player.x,player.y,190,0,Math.PI*2);
+ctx.fill();
+
+ctx.restore();
+
+ctx.fillStyle='rgba(0,0,0,.45)';
+ctx.fillRect(12,12,230,26);
+
+ctx.fillStyle='#ddd';
+ctx.font='12px Arial';
+ctx.fillText('WASD mover | E interagir | Q trocar | ESPAÇO usar',20,30);
+
+}
+
+let last=0;
+
+function loop(ts){
+
+let dt=Math.min(.04,(ts-last)/1000||0);
+last=ts;
+
+update(dt);
+draw();
+
+requestAnimationFrame(loop);
+}
+
+document.getElementById('start').onclick=()=>{
+gameState='playing';
+document.getElementById('overlay').style.display='none';
+say('Explore a casa e encontre as chaves.');
+updateHUD();
+};
+
+updateHUD();
+requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>
