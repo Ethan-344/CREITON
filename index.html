@@ -1,226 +1,788 @@
-from pathlib import Path
-p = Path('/mnt/data/a_casa_do_outro_lado_3d.html')
-s = p.read_text()
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sobrevivência na Mansão Sombria - 3D</title>
+    <!-- Tailwind CSS para estilização da HUD e menus -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js para renderização 3D -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #050505;
+            font-family: 'Courier New', Courier, monospace;
+            user-select: none;
+        }
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        /* Efeito de vinheta de terror e scanlines na tela */
+        .horror-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.9), inset 0 0 50px rgba(100, 0, 0, 0.4);
+            z-index: 10;
+        }
+        .scanlines {
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+            background-size: 100% 4px;
+            z-index: 11;
+        }
+    </style>
+</head>
+<body>
 
-# Interface: ammunition, reload and crosshair.
-s = s.replace(
-'<span class="pill" id="phase">Fase: 1/4</span>',
-'<span class="pill" id="phase">Fase: 1/4</span><span class="pill" id="ammo">Energia: 12/36</span>'
-)
-s = s.replace(
-'<div id="help">WASD mover · Mouse olhar · E interagir · Q trocar equipamento · Espaço usar · Shift correr</div>',
-'<div id="help">WASD mover · Mouse olhar · E interagir · Botão esquerdo atirar · R recarregar · Q equipamento · Espaço usar · Shift correr</div><div id="crosshair">＋</div>'
-)
-s = s.replace(
-'#panel p{line-height:1.6;color:#ccc}button{',
-'#panel p{line-height:1.6;color:#ccc}#crosshair{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);font-size:25px;color:#f2e6d0;text-shadow:0 0 6px #000;pointer-events:none;z-index:2}button{'
-)
-s = s.replace(
-'Explore a casa em terceira pessoa. Seu personagem humanoide aparece no cenário 3D. Encontre três chaves, recolha equipamentos e fuja da criatura que ronda os corredores.',
-'Explore a casa em primeira pessoa. Encontre três chaves, recolha comida e energia, use seu blaster fictício para afastar a criatura e fuja.'
-)
-s = s.replace(
-'Use WASD para andar, mouse para olhar e E para interagir. Clique em “Entrar” para começar.',
-'WASD para andar · Mouse para olhar · E para interagir · Clique esquerdo para disparar · R para recarregar.'
-)
+    <!-- Overlay de terror -->
+    <div class="horror-overlay scanlines"></div>
 
-# Add food and energy pickups throughout the house.
-s = s.replace(
-"{x:3,z:3,type:'note',label:'Bilhete'}",
-"{x:3,z:3,type:'note',label:'Bilhete'},{x:-2,z:3,type:'food',label:'Lata de comida'}"
-)
-s = s.replace(
-"{x:4,z:3,type:'battery',label:'Pilha'}",
-"{x:4,z:3,type:'battery',label:'Pilha'},{x:2,z:-3,type:'ammo',label:'Células de energia'}",
-1
-)
-s = s.replace(
-"{x:4,z:-3,type:'snack',label:'Comida'}",
-"{x:4,z:-3,type:'food',label:'Comida enlatada'}"
-)
-s = s.replace(
-"{x:-4,z:-3,type:'battery',label:'Pilha'}",
-"{x:-4,z:-3,type:'battery',label:'Pilha'},{x:1,z:0,type:'food',label:'Pacote de biscoitos'}"
-)
-s = s.replace(
-"{x:4,z:3,type:'battery',label:'Pilha'}",
-"{x:4,z:3,type:'battery',label:'Pilha'},{x:-2,z:2,type:'ammo',label:'Células de energia'}"
-)
+    <!-- Tela Inicial / Menu -->
+    <div id="main-menu" class="absolute inset-0 bg-black/95 z-50 flex flex-col items-center justify-center text-center p-6">
+        <div class="max-w-xl bg-neutral-900 border-2 border-red-900/60 p-8 rounded-xl shadow-2xl shadow-red-950/50">
+            <h1 class="text-4xl md:text-5xl font-extrabold text-red-600 tracking-wider mb-4 uppercase drop-shadow-[0_5px_5px_rgba(255,0,0,0.5)]">Mansão Sombria</h1>
+            <p class="text-neutral-400 text-sm md:text-base mb-6 leading-relaxed">
+                Você está preso em uma mansão amaldiçoada. Um monstro grotesco ronda os corredores escuros. 
+                Sua missão em cada nível é encontrar a <strong>Chave Dourada</strong> e escapar pela <strong>Porta Trancada</strong>.
+                Colete comida para curar seus ferimentos e atire no monstro para atrasá-lo!
+            </p>
+            <div class="bg-neutral-950 p-4 rounded-lg mb-6 text-left border border-neutral-800 text-xs md:text-sm text-neutral-300 space-y-2">
+                <p>🎮 <strong>W, A, S, D</strong> ou <strong>Setas</strong>: Movimentar</p>
+                <p>🖱️ <strong>Mouse</strong>: Olhar ao redor (Clique na tela para travar o cursor)</p>
+                <p>🔫 <strong>Botão Esquerdo</strong>: Disparar arma</p>
+                <p>🍔 <strong>Comida</strong>: Encoste para curar (❤️ Vida)</p>
+                <p>🔑 <strong>Chave</strong>: Encontre para abrir a porta de saída</p>
+            </div>
+            <button id="start-btn" class="w-full py-4 bg-gradient-to-r from-red-800 to-red-600 hover:from-red-700 hover:to-red-500 text-white font-bold text-lg rounded-lg shadow-lg transition-all transform hover:scale-105 uppercase tracking-widest cursor-pointer">
+                Entrar na Mansão
+            </button>
+        </div>
+    </div>
 
-# Add weapon state.
-s = s.replace(
-"let roomIndex=0,keys=0,health=100,gear='flash',inventory={pulse:0,flare:0},collected=new Set(),stun=0,damageTimer=0,gameOn=false,ended=false,elapsed=0;",
-"let roomIndex=0,keys=0,health=100,gear='flash',inventory={pulse:0,flare:0},collected=new Set(),stun=0,damageTimer=0,gameOn=false,ended=false,elapsed=0;\\nlet ammo=12,reserveAmmo=36,shootCooldown=0,monsterHP=100,reloadTimer=0;\\nconst projectiles=[];"
-)
+    <!-- HUD do Jogo (Visível durante a partida) -->
+    <div id="hud" class="absolute inset-0 z-20 pointer-events-none hidden flex flex-col justify-between p-6">
+        <!-- Topo: Informações do Nível e Status -->
+        <div class="flex justify-between items-start">
+            <div class="bg-black/70 border border-red-900/40 p-4 rounded-lg backdrop-blur-sm text-white space-y-1">
+                <div class="text-xs text-red-400 font-bold uppercase tracking-widest">Fase Atual</div>
+                <div id="hud-level" class="text-2xl font-black">Nível 1 / 3</div>
+            </div>
+            <div class="bg-black/70 border border-neutral-800 p-4 rounded-lg backdrop-blur-sm text-white flex items-center space-x-6">
+                <div>
+                    <div class="text-xs text-neutral-400 font-bold uppercase tracking-widest">Vida</div>
+                    <div id="hud-hp" class="text-xl font-black text-red-500">100 / 100</div>
+                </div>
+                <div class="border-l border-neutral-700 pl-6">
+                    <div class="text-xs text-neutral-400 font-bold uppercase tracking-widest">Munição</div>
+                    <div id="hud-ammo" class="text-xl font-black text-amber-400">30 / 30</div>
+                </div>
+                <div class="border-l border-neutral-700 pl-6">
+                    <div class="text-xs text-neutral-400 font-bold uppercase tracking-widest">Chave</div>
+                    <div id="hud-key" class="text-xl font-black text-neutral-500">❌ Ausente</div>
+                </div>
+            </div>
+        </div>
 
-# Make the creature more distinctive and menacing with non-graphic stylized details.
-s = s.replace(
-"if(isMonster){\\n  for(const side of [-1,1]){const eye=new THREE.Mesh(new THREE.SphereGeometry(.055,8,8),eyeMat);eye.position.set(side*.105,2.06,-.22);root.add(eye);}\\n }",
-"""if(isMonster){
-  // Chifres curtos, mandíbula escura, olhos brilhantes e garras estilizadas.
-  for(const side of [-1,1]){
-   const eye=new THREE.Mesh(new THREE.SphereGeometry(.065,10,8),eyeMat);
-   eye.position.set(side*.105,2.06,-.22);root.add(eye);
-   const horn=new THREE.Mesh(new THREE.ConeGeometry(.105,.42,7),monsterMat);
-   horn.position.set(side*.19,2.34,-.015);
-   horn.rotation.z=side*.38;root.add(horn);
-   const claw=new THREE.Mesh(new THREE.ConeGeometry(.055,.32,6),mat(0x09090d));
-   claw.position.set(side*.48,1.05,-.12);
-   claw.rotation.x=Math.PI;root.add(claw);
-  }
-  const jaw=new THREE.Mesh(new THREE.BoxGeometry(.24,.10,.12),mat(0x08070a));
-  jaw.position.set(0,1.91,-.205);root.add(jaw);
-  const ridge=new THREE.Mesh(new THREE.ConeGeometry(.12,.38,7),monsterMat);
-  ridge.position.set(0,2.42,.04);root.add(ridge);
- }"""
-)
+        <!-- Centro: Mira -->
+        <div class="absolute inset-0 flex items-center justify-center">
+            <div class="w-2 h-2 bg-red-600 rounded-full opacity-75 shadow-[0_0_8px_rgba(255,0,0,0.8)]"></div>
+        </div>
 
-# Add colors/geometries for food and ammo items.
-s = s.replace(
-"const color=it.type==='key'?0xe7c84c:it.type==='pulse'?0x55ddeb:it.type==='flare'?0xff8b45:it.type==='note'?0xd6c9a7:0x8cc39d;\\n  const mesh=new THREE.Mesh(new THREE.IcosahedronGeometry(.22,0),new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:.35}));",
-"""const color=it.type==='key'?0xe7c84c:it.type==='pulse'?0x55ddeb:it.type==='flare'?0xff8b45:it.type==='note'?0xd6c9a7:it.type==='food'?0x75c66b:it.type==='ammo'?0x65aaff:0x8cc39d;
-  const geometry=it.type==='food'?new THREE.CylinderGeometry(.16,.16,.3,12):it.type==='ammo'?new THREE.BoxGeometry(.28,.22,.22):new THREE.IcosahedronGeometry(.22,0);
-  const mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:.35}));"""
-)
+        <!-- Rodapé: Mensagens e Arma ativa -->
+        <div class="flex justify-between items-end">
+            <div id="hud-message" class="bg-black/80 border border-neutral-800 px-4 py-2 rounded text-neutral-300 text-sm max-w-sm transition-opacity duration-300">
+                Explore a casa e encontre a saída!
+            </div>
+            <div class="bg-black/70 border border-neutral-800 px-4 py-3 rounded-lg text-white text-right">
+                <div class="text-xs text-neutral-400 font-bold uppercase">Arma</div>
+                <div class="text-sm font-bold text-amber-500">Pistola Tática Cal. 45</div>
+            </div>
+        </div>
+    </div>
 
-# HUD includes ammo.
-s = s.replace(
-"document.querySelector('#phase').textContent='Fase: '+Math.min(4,Math.floor(roomIndex/2)+1)+'/4';",
-"document.querySelector('#phase').textContent='Fase: '+Math.min(4,Math.floor(roomIndex/2)+1)+'/4';\\n document.querySelector('#ammo').textContent='Energia: '+ammo+'/'+reserveAmmo;"
-)
+    <!-- Tela de Game Over / Vitória -->
+    <div id="game-over-screen" class="absolute inset-0 bg-black/95 z-50 flex flex-col items-center justify-center text-center p-6 hidden">
+        <div class="max-w-md bg-neutral-900 border-2 border-red-900/60 p-8 rounded-xl shadow-2xl">
+            <h2 id="game-over-title" class="text-3xl font-extrabold text-red-600 uppercase mb-4">Você Morreu</h2>
+            <p id="game-over-desc" class="text-neutral-400 mb-6 text-sm">O monstro te alcançou na escuridão...</p>
+            <button id="restart-btn" class="w-full py-3 bg-red-800 hover:bg-red-700 text-white font-bold rounded-lg shadow-lg transition-all uppercase tracking-wider cursor-pointer">
+                Tentar Novamente
+            </button>
+        </div>
+    </div>
 
-# Interaction pickups.
-s = s.replace(
-"if(it.type==='snack'){health=Math.min(100,health+20);say('Você encontrou comida.');}",
-"""if(it.type==='snack'||it.type==='food'){health=Math.min(100,health+30);say('Comida coletada: +30 de vida.');}
- if(it.type==='ammo'){reserveAmmo=Math.min(72,reserveAmmo+12);say('Células de energia coletadas: +12 cargas.');}"""
-)
+    <!-- Container do WebGL / Three.js -->
+    <div id="canvas-container"></div>
 
-# Battery becomes battery for light (still heals a little as a game pickup).
-s = s.replace(
-"if(it.type==='battery'){health=Math.min(100,health+10);say('Pilha encontrada. Você recuperou um pouco de vida.');}",
-"if(it.type==='battery'){health=Math.min(100,health+10);say('Pilha encontrada: +10 de vida.');}"
-)
+    <script>
+        // --- VARIÁVEIS GLOBAIS DO JOGO ---
+        let scene, camera, renderer;
+        let isGameStarted = false;
+        let clock = new THREE.Clock();
 
-# Create first-person arms and fictional blaster attached to camera.
-anchor = "const player=makeHumanoid(false);player.visible=true;scene.add(player);"
-s = s.replace(
-anchor,
-"""const player=makeHumanoid(false);player.visible=false;scene.add(player);
+        // Controles de Movimento
+        let moveForward = false;
+        let moveBackward = false;
+        let moveLeft = false;
+        let moveRight = false;
+        let velocity = new THREE.Vector3();
+        let direction = new THREE.Vector3();
 
-// Braços, luvas e blaster de energia são presos à câmera: visão em primeira pessoa.
-const viewModel=new THREE.Group();
-camera.add(viewModel);
-const sleeveMat=mat(0x26384b),gloveMat=mat(0x9b765f),gunMat=mat(0x202832,.42,.55),glowMat=new THREE.MeshBasicMaterial({color:0x42d9ff});
-function vmBox(x,y,z,sx,sy,sz,material){
- const mesh=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),material);
- mesh.position.set(x,y,z);viewModel.add(mesh);return mesh;
-}
-const leftArm=new THREE.Mesh(new THREE.CapsuleGeometry(.105,.48,4,8),sleeveMat);
-leftArm.position.set(-.38,-.42,-.58);leftArm.rotation.z=-.38;viewModel.add(leftArm);
-const rightArm=new THREE.Mesh(new THREE.CapsuleGeometry(.105,.48,4,8),sleeveMat);
-rightArm.position.set(.38,-.43,-.58);rightArm.rotation.z=.38;viewModel.add(rightArm);
-vmBox(-.38,-.23,-.78,.20,.14,.18,gloveMat);
-vmBox(.38,-.23,-.78,.20,.14,.18,gloveMat);
-// Blaster claramente fictício, com núcleo luminoso.
-vmBox(.34,-.28,-.82,.24,.19,.48,gunMat);
-vmBox(.34,-.17,-1.08,.13,.09,.24,metal);
-vmBox(.34,-.27,-1.20,.09,.07,.07,glowMat);
-vmBox(.34,-.43,-.72,.13,.28,.16,gunMat);
-const muzzleLight=new THREE.PointLight(0x42d9ff,0,3);
-viewModel.add(muzzleLight);
-const weaponFlash=new THREE.Mesh(new THREE.SphereGeometry(.09,10,8),glowMat);
-weaponFlash.position.set(.34,-.27,-1.28);weaponFlash.visible=false;viewModel.add(weaponFlash);"""
-)
+        // Variáveis de Jogador e Jogo
+        let playerHP = 100;
+        let maxHP = 100;
+        let ammo = 30;
+        let maxAmmo = 30;
+        let hasKey = false;
+        let currentLevel = 1;
+        const maxLevels = 3;
 
-# Add shooting/reload functions before key handler.
-insert_before = "const keysDown={};"
-shooting = """function reloadWeapon(){
- if(reloadTimer>0||ammo>=12||reserveAmmo<=0){say('Não é possível recarregar agora.');return;}
- reloadTimer=1.15;say('Recarregando o blaster...');
-}
-function shoot(){
- if(!gameOn||ended||shootCooldown>0||reloadTimer>0)return;
- if(ammo<=0){say('Sem energia. Pressione R para recarregar.');return;}
- ammo--;shootCooldown=.28;
- weaponFlash.visible=true;muzzleLight.intensity=7;
- setTimeout(()=>{weaponFlash.visible=false;muzzleLight.intensity=0;},75);
- // Disparo de energia fictício: verifica se a criatura está na linha de visão.
- const direction=new THREE.Vector3();
- camera.getWorldDirection(direction);
- const toMonster=monsterPos.clone().add(new THREE.Vector3(0,1.15,0)).sub(camera.position);
- const distance=toMonster.length();
- const aim=toMonster.normalize().dot(direction);
- if(distance<18&&aim>.975&&monster.visible){
-  monsterHP-=25;stun=Math.max(stun,.55);
-  say(monsterHP<=0?'A criatura se desfez em sombras!':'Disparo acertou a criatura!');
-  if(monsterHP<=0){monster.visible=false;monsterPos.set(100,0,100);}
- }else{
-  say('O disparo de energia iluminou a escuridão.');
- }
- updateHUD();
-}
-"""
-s = s.replace(insert_before, shooting + insert_before)
+        // Entidades do Mundo
+        let walls = [];
+        let interactables = []; // Alimentos, Chave, Porta
+        let monster;
+        let monsterMesh;
+        let monsterSpeed = 1.8;
+        let monsterHP = 50;
 
-# Keydown reload; click-to-fire separate from canvas click lock.
-s = s.replace(
-"if(k==='e')interact();\\n if(k===' ')useGear();",
-"if(k==='e')interact();\\n if(k==='r')reloadWeapon();\\n if(k===' ')useGear();"
-)
-s = s.replace(
-"canvas.addEventListener('click',()=>{if(gameOn&&!ended)canvas.requestPointerLock?.();});",
-"canvas.addEventListener('click',()=>{if(gameOn&&!ended){if(!pointerLocked)canvas.requestPointerLock?.();else shoot();}});\\naddEventListener('mousedown',e=>{if(e.button===0&&pointerLocked)shoot();});"
-)
+        // Projéteis ativos
+        let bullets = [];
 
-# Replace third-person camera positioning with first-person camera.
-old_camera = """// First-person camera with a visible, realistic-style 3D humanoid enemy.
- const direction=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
- // Personagem visível em terceira pessoa, com câmera acompanhando por trás.
- player.position.set(playerPos.x,0,playerPos.z);
- player.rotation.y=yaw;
- const cameraOffset=direction.clone().multiplyScalar(-4.2);
- camera.position.set(playerPos.x+cameraOffset.x,2.65+pitch*1.5,playerPos.z+cameraOffset.z);
- camera.lookAt(playerPos.x,1.25,playerPos.z);
- const flashlightTarget=camera.position.clone().add(direction.multiplyScalar(7));
- flashlight.position.copy(camera.position);flashlight.target.position.copy(flashlightTarget);"""
-new_camera = """// Câmera na altura dos olhos: primeira pessoa.
- const direction=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
- camera.position.set(playerPos.x,1.66,playerPos.z);
- camera.rotation.order='YXZ';
- camera.rotation.set(pitch,yaw,0);
- const flashlightTarget=camera.position.clone().add(direction.clone().multiplyScalar(7));
- flashlight.position.copy(camera.position);flashlight.target.position.copy(flashlightTarget);"""
-s = s.replace(old_camera,new_camera)
+        // Gestão do Mouse (Look Around)
+        let pitchObject, yawObject;
+        let controlsEnabled = false;
 
-# Timers, reload completion, and monster death handling.
-s = s.replace(
-"if(!gameOn||ended)return;\\n elapsed+=dt;",
-"""if(!gameOn||ended)return;
- elapsed+=dt;
- shootCooldown=Math.max(0,shootCooldown-dt);
- if(reloadTimer>0){
-  reloadTimer-=dt;
-  if(reloadTimer<=0){
-   const needed=12-ammo,loaded=Math.min(needed,reserveAmmo);
-   ammo+=loaded;reserveAmmo-=loaded;say('Blaster recarregado.');
-   updateHUD();
-  }
- }"""
-)
+        const moveSpeed = 5.0;
 
-# First-person start text and ensure no player mesh appears.
-s = s.replace(
-"monster.visible=true;\\n // Monster only becomes visible when close enough or illuminated.",
-"monster.visible=true;\\n // Monster only becomes visible when close enough or illuminated."
-)
+        // Inicialização Principal ao carregar a página
+        window.addEventListener('load', () => {
+            initThree();
+            setupEventListeners();
+        });
 
-# Make monster hit state visible and don't let dead monster continue pursuit.
-s = s.replace(
-"if(stun>0)stun-=dt;\\n else{",
-"if(stun>0)stun-=dt;\\n else if(monsterHP>0){"
-)
+        function initThree() {
+            const container = document.getElementById('canvas-container');
 
-# Add food item to final room? keep exit empty.
-p.write_text(s)
-print("Atualizado:", p, "bytes:", p.stat().st_size)
+            // 1. Cena
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050505);
+            scene.fog = new THREE.FogExp2(0x050505, 0.08);
+
+            // 2. Câmera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            // Hierarquia de rotação da câmera (Primeira Pessoa)
+            yawObject = new THREE.Object3D();
+            yawObject.position.set(0, 1.6, 5); // Posição inicial no corredor
+            pitchObject = new THREE.Object3D();
+            pitchObject.add(camera);
+            yawObject.add(pitchObject);
+            scene.add(yawObject);
+
+            // 3. Renderizador
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            // 4. Iluminação ambiente sombria + luz pontual na lanterna do jogador
+            const ambientLight = new THREE.AmbientLight(0x111115, 1.2);
+            scene.add(ambientLight);
+
+            const flashlight = new THREE.PointLight(0xffeedd, 2.5, 12);
+            flashlight.position.set(0, 0, 0);
+            pitchObject.add(flashlight);
+
+            // Criar Arma Visual na tela (Visão da primeira pessoa)
+            createWeaponModel();
+
+            // Redimensionamento de Janela
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        let gunMesh;
+        function createWeaponModel() {
+            const gunGroup = new THREE.Group();
+            
+            // Corpo da pistola
+            const bodyGeo = new THREE.BoxGeometry(0.08, 0.1, 0.35);
+            const gunMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.3, metalness: 0.8 });
+            const body = new THREE.Mesh(bodyGeo, gunMat);
+            body.position.set(0.2, -0.22, -0.5);
+            gunGroup.add(body);
+
+            // Cano da arma
+            const barrelGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.25, 8);
+            const barrel = new THREE.Mesh(barrelGeo, gunMat);
+            barrel.rotation.x = Math.PI / 2;
+            barrel.position.set(0.2, -0.18, -0.65);
+            gunGroup.add(barrel);
+
+            pitchObject.add(gunGroup);
+            gunMesh = gunGroup;
+        }
+
+        // --- GERAÇÃO DE NÍVEIS E AMBIENTE (MÚLTIPLOS CÔMODOS) ---
+        function buildLevel(levelNum) {
+            // Limpar elementos anteriores
+            walls.forEach(w => scene.remove(w));
+            walls = [];
+            interactables.forEach(i => scene.remove(i.mesh));
+            interactables = [];
+            if (monsterMesh) scene.remove(monsterMesh);
+
+            hasKey = false;
+            updateHUD();
+
+            // Tamanho do mapa aumenta levemente por nível
+            const roomSize = 16 + (levelNum * 4);
+            
+            // Texturas/Materiais baseados em cores escuras e realistas
+            const floorMat = new THREE.MeshStandardMaterial({ color: 0x1a1512, roughness: 0.9 });
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0x332c28, roughness: 0.8 });
+            const ceilingMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 1.0 });
+
+            // Chão
+            const floorGeo = new THREE.PlaneGeometry(roomSize, roomSize);
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+            walls.push(floor);
+
+            // Teto
+            const ceiling = new THREE.Mesh(floorGeo, ceilingMat);
+            ceiling.rotation.x = Math.PI / 2;
+            ceiling.position.y = 4;
+            scene.add(ceiling);
+
+            // Paredes Externas da Mansão
+            const half = roomSize / 2;
+            createWall(roomSize, 4, 0.5, 0, 2, -half, 0); // Norte
+            createWall(roomSize, 4, 0.5, 0, 2, half, 0);  // Sul
+            createWall(0.5, 4, roomSize, -half, 2, 0, 0); // Oeste
+            createWall(0.5, 4, roomSize, half, 2, 0, 0);  // Leste
+
+            // Paredes Internas (Cômodos e Corredores Labirínticos)
+            if (levelNum === 1) {
+                createWall(8, 4, 0.5, -4, 2, -2, 0);
+                createWall(0.5, 4, 8, 0, 2, 3, 0);
+                createWall(6, 4, 0.5, 5, 2, -1, 0);
+            } else if (levelNum === 2) {
+                createWall(10, 4, 0.5, -3, 2, -3, 0);
+                createWall(0.5, 4, 10, -3, 2, 3, 0);
+                createWall(8, 4, 0.5, 4, 2, 2, 0);
+                createWall(0.5, 4, 6, 2, 2, -3, 0);
+            } else {
+                // Nível 3: Complexo com mais divisões
+                createWall(12, 4, 0.5, -4, 2, -4, 0);
+                createWall(0.5, 4, 12, -4, 2, 2, 0);
+                createWall(10, 4, 0.5, 3, 2, -1, 0);
+                createWall(0.5, 4, 8, 3, 2, 4, 0);
+                createWall(8, 4, 0.5, -1, 2, 5, 0);
+            }
+
+            // Luzes de cômodo (Lâmpadas tremeluzentes)
+            const light1 = new THREE.PointLight(0xffaa44, 1.5, 10);
+            light1.position.set(-roomSize/4, 3.5, -roomSize/4);
+            scene.add(light1);
+
+            const light2 = new THREE.PointLight(0x44aaff, 1.5, 10);
+            light2.position.set(roomSize/4, 3.5, roomSize/4);
+            scene.add(light2);
+
+            // Posicionar Jogador no Início
+            yawObject.position.set(0, 1.6, half - 3);
+            yawObject.rotation.y = 0;
+            pitchObject.rotation.x = 0;
+
+            // Spawnar Itens (Comida e Chave)
+            spawnItems(roomSize);
+
+            // Spawnar Porta de Saída
+            spawnDoor(roomSize);
+
+            // Spawnar Monstro
+            spawnMonster(roomSize, levelNum);
+
+            showhudMessage(`Nível ${levelNum}: Encontre a chave dourada para abrir a porta!`);
+        }
+
+        function createWall(w, h, d, x, y, z, rotY = 0) {
+            const geometry = new THREE.BoxGeometry(w, h, d);
+            const material = new THREE.MeshStandardMaterial({ color: 0x3d3530, roughness: 0.8 });
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(x, y, z);
+            mesh.rotation.y = rotY;
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+            walls.push(mesh);
+            return mesh;
+        }
+
+        // --- SISTEMA DE ITENS (COMIDA E CHAVES) ---
+        function spawnItems(roomSize) {
+            const limit = roomSize / 2 - 2;
+
+            // 1. Chave Dourada (Posição aleatória nos cômodos)
+            const keyGeo = new THREE.BoxGeometry(0.4, 0.4, 0.8);
+            const keyMat = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.9, roughness: 0.1 });
+            const keyMesh = new THREE.Mesh(keyGeo, keyMat);
+            const kx = (Math.random() - 0.5) * limit * 1.5;
+            const kz = (Math.random() - 0.5) * limit * 1.5;
+            keyMesh.position.set(kx, 0.5, kz);
+            scene.add(keyMesh);
+            interactables.push({ type: 'key', mesh: keyMesh, radius: 1.2 });
+
+            // 2. Itens de Comida (Hambúrguer / Frasco de Vida) espalhados (3 unidades)
+            for (let i = 0; i < 3; i++) {
+                const foodGroup = new THREE.Group();
+                const burgerGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.2, 12);
+                const burgerMat = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+                const burger = new THREE.Mesh(burgerGeo, burgerMat);
+                foodGroup.add(burger);
+
+                const fx = (Math.random() - 0.5) * limit * 1.6;
+                const fz = (Math.random() - 0.5) * limit * 1.6;
+                foodGroup.position.set(fx, 0.3, fz);
+                scene.add(foodGroup);
+                interactables.push({ type: 'food', mesh: foodGroup, radius: 1.0 });
+            }
+        }
+
+        let doorMesh;
+        function spawnDoor(roomSize) {
+            const half = roomSize / 2;
+            const doorGeo = new THREE.BoxGeometry(2, 3, 0.4);
+            const doorMat = new THREE.MeshStandardMaterial({ color: 0x4a2e18, roughness: 0.7 });
+            doorMesh = new THREE.Mesh(doorGeo, doorMat);
+            // Colocar na parede norte
+            doorMesh.position.set(0, 1.5, -half + 0.3);
+            scene.add(doorMesh);
+            interactables.push({ type: 'door', mesh: doorMesh, radius: 2.0 });
+        }
+
+        // --- SISTEMA DO MONSTRO CUSTOMIZADO 3D ---
+        function spawnMonster(roomSize, level) {
+            const monsterGroup = new THREE.Group();
+
+            // Corpo grotesco esguio
+            const torsoGeo = new THREE.CylinderGeometry(0.4, 0.2, 1.6, 8);
+            const monsterMat = new THREE.MeshStandardMaterial({ color: 0x221111, roughness: 0.5, metalness: 0.2 });
+            const torso = new THREE.Mesh(torsoGeo, monsterMat);
+            torso.position.y = 1.2;
+            monsterGroup.add(torso);
+
+            // Cabeça aterrorizante
+            const headGeo = new THREE.SphereGeometry(0.4, 8, 8);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0x550000, roughness: 0.3 });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 2.2;
+            monsterGroup.add(head);
+
+            // Olhos brilhantes assustadores
+            const eyeGeo = new THREE.SphereGeometry(0.08, 6, 6);
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            
+            const eye1 = new THREE.Mesh(eyeGeo, eyeMat);
+            eye1.position.set(0.15, 2.3, 0.35);
+            monsterGroup.add(eye1);
+
+            const eye2 = new THREE.Mesh(eyeGeo, eyeMat);
+            eye2.position.set(-0.15, 2.3, 0.35);
+            monsterGroup.add(eye2);
+
+            // Posicionar monstro longe do jogador
+            monsterGroup.position.set(roomSize/2 - 3, 0, roomSize/2 - 3);
+            scene.add(monsterGroup);
+
+            monsterMesh = monsterGroup;
+            monsterHP = 40 + (level * 20);
+            monsterSpeed = 1.6 + (level * 0.4);
+        }
+
+        // --- EVENTOS DE CONTROLE E TECLADO ---
+        function setupEventListeners() {
+            const startBtn = document.getElementById('start-btn');
+            const restartBtn = document.getElementById('restart-btn');
+
+            startBtn.addEventListener('click', startGame);
+            restartBtn.addEventListener('click', restartGame);
+
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+            document.addEventListener('mousedown', onMouseDown);
+
+            // Travar ponteiro do mouse ao clicar na tela do jogo
+            renderer.domElement.addEventListener('click', () => {
+                if (isGameStarted) {
+                    renderer.domElement.requestPointerLock();
+                }
+            });
+
+            document.addEventListener('pointerlockchange', () => {
+                controlsEnabled = (document.pointerLockElement === renderer.domElement);
+            });
+
+            document.addEventListener('mousemove', onMouseMove);
+        }
+
+        function startGame() {
+            document.getElementById('main-menu').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            renderer.domElement.requestPointerLock();
+            
+            currentLevel = 1;
+            playerHP = 100;
+            ammo = 30;
+            isGameStarted = true;
+
+            buildLevel(currentLevel);
+        }
+
+        function restartGame() {
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            renderer.domElement.requestPointerLock();
+
+            currentLevel = 1;
+            playerHP = 100;
+            ammo = 30;
+            isGameStarted = true;
+
+            buildLevel(currentLevel);
+        }
+
+        function onKeyDown(event) {
+            switch (event.code) {
+                case 'KeyW':
+                case 'ArrowUp':
+                    moveForward = true;
+                    break;
+                case 'KeyS':
+                case 'ArrowDown':
+                    moveBackward = true;
+                    break;
+                case 'KeyA':
+                case 'ArrowLeft':
+                    moveLeft = true;
+                    break;
+                case 'KeyD':
+                case 'ArrowRight':
+                    moveRight = true;
+                    break;
+            }
+        }
+
+        function onKeyUp(event) {
+            switch (event.code) {
+                case 'KeyW':
+                case 'ArrowUp':
+                    moveForward = false;
+                    break;
+                case 'KeyS':
+                case 'ArrowDown':
+                    moveBackward = false;
+                    break;
+                case 'KeyA':
+                case 'ArrowLeft':
+                    moveLeft = false;
+                    break;
+                case 'KeyD':
+                case 'ArrowRight':
+                    moveRight = false;
+                    break;
+            }
+        }
+
+        function onMouseMove(event) {
+            if (!controlsEnabled || !isGameStarted) return;
+
+            const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+            const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+
+            yawObject.rotation.y -= movementX * 0.0025;
+            pitchObject.rotation.x -= movementY * 0.0025;
+
+            // Limitar ângulo vertical da cabeça (pitch)
+            pitchObject.rotation.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, pitchObject.rotation.x));
+        }
+
+        // --- SISTEMA DE TIRO E DISPARO ---
+        function onMouseDown(event) {
+            if (!controlsEnabled || !isGameStarted || event.button !== 0) return;
+
+            if (ammo > 0) {
+                ammo--;
+                updateHUD();
+
+                // Recuo visual da arma
+                if (gunMesh) {
+                    gunMesh.position.z += 0.08;
+                    setTimeout(() => { gunMesh.position.z -= 0.08; }, 80);
+                }
+
+                // Criar projétil saindo da arma
+                const bulletGeo = new THREE.SphereGeometry(0.08, 6, 6);
+                const bulletMat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
+                const bulletMesh = new THREE.Mesh(bulletGeo, bulletMat);
+
+                // Direção para onde a câmera está olhando
+                const dir = new THREE.Vector3();
+                camera.getWorldDirection(dir);
+
+                bulletMesh.position.copy(yawObject.position).add(new THREE.Vector3(0, -0.1, 0));
+                scene.add(bulletMesh);
+
+                bullets.push({
+                    mesh: bulletMesh,
+                    direction: dir,
+                    speed: 35.0,
+                    life: 2.0 // Segundos de vida do projétil
+                });
+            } else {
+                showhudMessage("Munição esgotada!");
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- LOOP PRINCIPAL DO JOGO (UPDATE & RENDER) ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = clock.getDelta();
+
+            if (isGameStarted) {
+                updatePlayer(delta);
+                updateMonster(delta);
+                updateBullets(delta);
+                checkInteractions();
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // Movimentação do Jogador com colisão simples nas paredes
+        function updatePlayer(delta) {
+            velocity.x -= velocity.x * 10.0 * delta;
+            velocity.z -= velocity.z * 10.0 * delta;
+
+            direction.z = Number(moveForward) - Number(moveBackward);
+            direction.x = Number(moveRight) - Number(moveLeft);
+            direction.normalize();
+
+            if (moveForward || moveBackward) velocity.z -= direction.z * moveSpeed * 5.0 * delta;
+            if (moveLeft || moveRight) velocity.x -= direction.x * moveSpeed * 5.0 * delta;
+
+            // Salvar posição anterior para reverter caso haja colisão
+            const oldX = yawObject.position.x;
+            const oldZ = yawObject.position.z;
+
+            yawObject.translateX(velocity.x * delta);
+            yawObject.translateZ(velocity.z * delta);
+
+            // Verificação básica de colisão com paredes do perímetro e caixas
+            const playerPos = yawObject.position;
+            const bound = (16 + (currentLevel * 4)) / 2 - 1;
+
+            if (Math.abs(playerPos.x) > bound || Math.abs(playerPos.z) > bound) {
+                yawObject.position.x = oldX;
+                yawObject.position.z = oldZ;
+            }
+
+            // Colisão com paredes internas
+            for (let i = 4; i < walls.length; i++) {
+                const wall = walls[i];
+                const box = new THREE.Box3().setFromObject(wall);
+                // Expandir ligeiramente a caixa do jogador para colisão
+                const playerBox = new THREE.Box3(
+                    new THREE.Vector3(playerPos.x - 0.4, playerPos.y - 1.5, playerPos.z - 0.4),
+                    new THREE.Vector3(playerPos.x + 0.4, playerPos.y + 0.5, playerPos.z + 0.4)
+                );
+                if (box.intersectsBox(playerBox)) {
+                    yawObject.position.x = oldX;
+                    yawObject.position.z = oldZ;
+                    break;
+                }
+            }
+        }
+
+        // Inteligência do Monstro (Perseguição ao Jogador)
+        function updateMonster(delta) {
+            if (!monsterMesh) return;
+
+            const monsterPos = monsterMesh.position;
+            const playerPos = yawObject.position;
+
+            // Direção em direção ao jogador
+            const dir = new THREE.Vector3().subVectors(playerPos, monsterPos);
+            dir.y = 0; // Manter no plano do chão
+            const distance = dir.length();
+            dir.normalize();
+
+            // Mover monstro se estiver na mesma sala ou próximo
+            if (distance < 20) {
+                monsterMesh.position.addScaledVector(dir, monsterSpeed * delta);
+                monsterMesh.lookAt(playerPos.x, monsterMesh.position.y, playerPos.z);
+
+                // Dano ao encostar no jogador
+                if (distance < 1.4) {
+                    playerHP -= 15 * delta; // Dano contínuo sob ataque
+                    updateHUD();
+                    if (playerHP <= 0) {
+                        triggerGameOver(false);
+                    }
+                }
+            }
+        }
+
+        // Atualizar Projéteis e verificar colisão com o Monstro
+        function updateBullets(delta) {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+                b.life -= delta;
+                b.mesh.position.addScaledVector(b.direction, b.speed * delta);
+
+                // Verificar colisão com o monstro
+                if (monsterMesh) {
+                    const dist = b.mesh.position.distanceTo(monsterMesh.position);
+                    if (dist < 1.2) {
+                        monsterHP -= 20;
+                        scene.remove(b.mesh);
+                        bullets.splice(i, 1);
+
+                        // Efeito de recuo do monstro ao levar tiro
+                        monsterMesh.position.addScaledVector(b.direction, 0.5);
+
+                        if (monsterHP <= 0) {
+                            scene.remove(monsterMesh);
+                            monsterMesh = null;
+                            showhudMessage("O monstro foi neutralizado temporariamente! Procure a saída.");
+                        }
+                        continue;
+                    }
+                }
+
+                // Remover projétil expirado
+                if (b.life <= 0) {
+                    scene.remove(b.mesh);
+                    bullets.splice(i, 1);
+                }
+            }
+        }
+
+        // Ver Coleta de Itens e Porta de Saída
+        function checkInteractions() {
+            const playerPos = yawObject.position;
+
+            for (let i = interactables.length - 1; i >= 0; i--) {
+                const item = interactables[i];
+                const dist = playerPos.distanceTo(item.mesh.position);
+
+                if (dist < item.radius) {
+                    if (item.type === 'key') {
+                        hasKey = true;
+                        scene.remove(item.mesh);
+                        interactables.splice(i, 1);
+                        showhudMessage("🔑 Você encontrou a Chave Dourada! Vá para a porta.");
+                        updateHUD();
+                    } else if (item.type === 'food') {
+                        playerHP = Math.min(maxHP, playerHP + 35);
+                        ammo = Math.min(maxAmmo, ammo + 10); // Bônus de munição na comida
+                        scene.remove(item.mesh);
+                        interactables.splice(i, 1);
+                        showhudMessage("🍔 Você comeu mantimentos: Vida e Munição recuperadas!");
+                        updateHUD();
+                    } else if (item.type === 'door') {
+                        if (hasKey) {
+                            if (currentLevel < maxLevels) {
+                                currentLevel++;
+                                showhudMessage(`Parabéns! Avançando para o Nível ${currentLevel}...`);
+                                setTimeout(() => {
+                                    buildLevel(currentLevel);
+                                }, 1500);
+                            } else {
+                                triggerGameOver(true); // Vitória ao completar todos os níveis
+                            }
+                        } else {
+                            showhudMessage("🔒 A porta está trancada. Você precisa da Chave Dourada!");
+                        }
+                    }
+                }
+            }
+        }
+
+        function updateHUD() {
+            document.getElementById('hud-level').innerText = `Nível ${currentLevel} / ${maxLevels}`;
+            document.getElementById('hud-hp').innerText = `${Math.max(0, Math.floor(playerHP))} / ${maxHP}`;
+            document.getElementById('hud-ammo').innerText = `${ammo} / ${maxAmmo}`;
+            
+            const keyEl = document.getElementById('hud-key');
+            if (hasKey) {
+                keyEl.innerText = "🔑 Coletada";
+                keyEl.className = "text-xl font-black text-amber-400";
+            } else {
+                keyEl.innerText = "❌ Ausente";
+                keyEl.className = "text-xl font-black text-neutral-500";
+            }
+        }
+
+        function showhudMessage(msg) {
+            const msgEl = document.getElementById('hud-message');
+            msgEl.innerText = msg;
+            msgEl.style.opacity = '1';
+            setTimeout(() => {
+                msgEl.style.opacity = '0.7';
+            }, 4000);
+        }
+
+        function triggerGameOver(isWin) {
+            isGameStarted = false;
+            document.exitPointerLock();
+            document.getElementById('hud').classList.add('hidden');
+            
+            const screen = document.getElementById('game-over-screen');
+            const title = document.getElementById('game-over-title');
+            const desc = document.getElementById('game-over-desc');
+            const btn = document.getElementById('restart-btn');
+
+            screen.classList.remove('hidden');
+
+            if (isWin) {
+                title.innerText = "Você Sobreviveu!";
+                title.className = "text-3xl font-extrabold text-amber-500 uppercase mb-4";
+                desc.innerText = "Você escapou com vida de todos os níveis da mansão sombria!";
+                btn.innerText = "Jogar Novamente";
+            } else {
+                title.innerText = "Você Morreu";
+                title.className = "text-3xl font-extrabold text-red-600 uppercase mb-4";
+                desc.innerText = "O monstro te alcançou na escuridão e consumiu sua alma...";
+                btn.innerText = "Tentar Novamente";
+            }
+        }
+
+        // Iniciar loop de animação
+        window.onload = function() {
+            animate();
+        };
+    </script>
+</body>
+</html>
